@@ -1,0 +1,865 @@
+{
+  "type": "object",
+  "properties": {
+    "plan_id": {},
+    "family": {},
+    "session_id": {},
+    "falsifier_class": {},
+    "expected_evidence_class": {},
+    "consequence_class": {},
+    "declared_steps": {},
+    "budget_calls": {},
+    "state": {},
+    "opened_ms": {},
+    "host_calibration": {},
+    "applies": {},
+    "observed_calls": {},
+    "closed_ms": {},
+    "grade_class": {},
+    "step_count_ok": {},
+    "falsifier_ok": {},
+    "measurement": {},
+    "advice": {},
+    "abandoned": {
+      "type": "boolean"
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "type": "string"
+        },
+        "work_session_id": {
+          "type": "string"
+        },
+        "source_incarnation": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "retained_session_without_descendants",
+            "retained_session_and_proven_descendants"
+          ]
+        },
+        "count_basis": {
+          "type": "string",
+          "const": "retained_recorded_requests"
+        },
+        "coverage": {
+          "type": "object",
+          "properties": {
+            "complete": {
+              "type": "boolean"
+            },
+            "cutoff": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "read_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "records": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "detail_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "report_bytes": {
+              "type": "integer",
+              "const": 0
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "complete",
+            "cutoff",
+            "read_calls",
+            "records",
+            "detail_bytes",
+            "report_bytes",
+            "reasons"
+          ],
+          "additionalProperties": false
+        },
+        "counts": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "admissions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "succeeded": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "refused": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cancelled": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "recorded_requests": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "admissions",
+            "succeeded",
+            "failed",
+            "refused",
+            "cancelled",
+            "unknown",
+            "recorded_requests"
+          ],
+          "additionalProperties": false
+        },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "project_id": {
+                "type": "string"
+              },
+              "result_id": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "succeeded",
+                  "failed",
+                  "refused",
+                  "cancelled",
+                  "unknown"
+                ]
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "work_session_id": {
+                "type": "string"
+              },
+              "request_ref": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "string",
+                    "pattern": "^[0-9]+$"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "sequence",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "result_ref": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "string",
+                    "pattern": "^[0-9]+$"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "sequence",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "result_excerpt": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "result_record": {
+                "type": "string"
+              },
+              "result_truncated": {
+                "type": "boolean"
+              },
+              "result_excerpt_truncated": {
+                "type": "boolean"
+              },
+              "result_detail_request": {
+                "type": "object",
+                "properties": {
+                  "work_session_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_.:-]+$"
+                  },
+                  "source_incarnation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "result_ref": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "sequence": {
+                        "type": "string",
+                        "pattern": "^[0-9]+$"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "sequence",
+                      "sha256"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "work_session_id",
+                  "source_incarnation",
+                  "result_ref"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "tool",
+              "project_id",
+              "outcome"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 512
+        },
+        "work_changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "string",
+                    "pattern": "^[0-9]+$"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "sequence",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              },
+              "project_id": {
+                "type": "string"
+              },
+              "turn_id": {
+                "type": "string"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "session": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "focus": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "next_move": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "plan": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "expected_evidence": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "decision_needed": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "result": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "evidence_readback": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "steps": {
+                    "type": "integer"
+                  },
+                  "independent": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "session"
+                ],
+                "additionalProperties": false
+              },
+              "truncated_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "state",
+                    "focus",
+                    "next_move",
+                    "plan",
+                    "expected_evidence",
+                    "falsifier",
+                    "decision_needed",
+                    "result",
+                    "evidence",
+                    "evidence_readback"
+                  ]
+                },
+                "maxItems": 10
+              }
+            },
+            "required": [
+              "ref",
+              "project_id",
+              "turn_id",
+              "change",
+              "truncated_fields"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 512
+        },
+        "unmatched_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "sequence",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 512
+        },
+        "own_call_exclusion": {
+          "type": "string",
+          "enum": [
+            "unavailable",
+            "host_record_excluded"
+          ]
+        },
+        "excluded_call_id": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "incarnation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "sequence",
+              "sha256",
+              "incarnation"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "identity",
+        "work_session_id",
+        "source_incarnation",
+        "scope",
+        "count_basis",
+        "coverage",
+        "counts",
+        "attempts",
+        "work_changes",
+        "unmatched_results",
+        "own_call_exclusion",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "current_work": {
+      "type": "object",
+      "properties": {
+        "work_session_id": {
+          "type": "string"
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "retained",
+            "not_retained"
+          ]
+        },
+        "fields": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "focus": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "next_move": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "plan": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "expected_evidence": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "falsifier": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "decision_needed": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "result": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "evidence": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "evidence_readback": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "steps": {
+              "type": "integer"
+            },
+            "independent": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "session"
+          ],
+          "additionalProperties": false
+        },
+        "field_refs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "focus": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "next_move": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "plan": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "expected_evidence": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "falsifier": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "decision_needed": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "evidence": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "evidence_readback": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "steps": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            },
+            "independent": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "sequence",
+                "sha256"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "truncated_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "state",
+              "focus",
+              "next_move",
+              "plan",
+              "expected_evidence",
+              "falsifier",
+              "decision_needed",
+              "result",
+              "evidence",
+              "evidence_readback"
+            ]
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "work_session_id",
+        "availability",
+        "fields",
+        "field_refs",
+        "truncated_fields"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

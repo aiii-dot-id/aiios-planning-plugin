@@ -1,0 +1,104 @@
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": [
+        "begin",
+        "material",
+        "apply",
+        "grade",
+        "advise",
+        "status",
+        "abandon"
+      ],
+      "default": "material"
+    },
+    "plan_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Existing registration ID. Omit for a read of current work; begin may generate an ID from the host call reference."
+    },
+    "family": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "falsifier_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "expected_evidence_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "consequence_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "apply_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "step_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "kind_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "from_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "to_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "result_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "control_class": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "declared_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "budget_calls": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "history_cursor": {
+      "type": "string",
+      "maxLength": 256
+    }
+  },
+  "additionalProperties": false
+}

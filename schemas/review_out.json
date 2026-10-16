@@ -1,0 +1,549 @@
+{
+  "type": "object",
+  "properties": {
+    "identity": {
+      "type": "string"
+    },
+    "work_session_id": {
+      "type": "string"
+    },
+    "source_incarnation": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "retained_session_without_descendants",
+        "retained_session_and_proven_descendants",
+        "retained_result_detail"
+      ]
+    },
+    "count_basis": {
+      "type": "string",
+      "const": "retained_recorded_requests"
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "cutoff": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "read_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "records": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detail_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "report_bytes": {
+          "type": "integer",
+          "const": 0
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "complete",
+        "cutoff",
+        "read_calls",
+        "records",
+        "detail_bytes",
+        "report_bytes",
+        "reasons"
+      ],
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "admissions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "refused": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cancelled": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recorded_requests": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "admissions",
+        "succeeded",
+        "failed",
+        "refused",
+        "cancelled",
+        "unknown",
+        "recorded_requests"
+      ],
+      "additionalProperties": false
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "result_id": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "refused",
+              "cancelled",
+              "unknown"
+            ]
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "work_session_id": {
+            "type": "string"
+          },
+          "request_ref": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "sequence",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "result_ref": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "sequence",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "result_excerpt": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "result_record": {
+            "type": "string"
+          },
+          "result_truncated": {
+            "type": "boolean"
+          },
+          "result_excerpt_truncated": {
+            "type": "boolean"
+          },
+          "result_detail_request": {
+            "type": "object",
+            "properties": {
+              "work_session_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_.:-]+$"
+              },
+              "source_incarnation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "result_ref": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sequence": {
+                    "type": "string",
+                    "pattern": "^[0-9]+$"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "sequence",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "work_session_id",
+              "source_incarnation",
+              "result_ref"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "tool",
+          "project_id",
+          "outcome"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 512
+    },
+    "work_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "sequence",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "turn_id": {
+            "type": "string"
+          },
+          "change": {
+            "type": "object",
+            "properties": {
+              "session": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "focus": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "next_move": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "plan": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "expected_evidence": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "falsifier": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "decision_needed": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "result": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "evidence": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "evidence_readback": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "steps": {
+                "type": "integer"
+              },
+              "independent": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "additionalProperties": false
+          },
+          "truncated_fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "state",
+                "focus",
+                "next_move",
+                "plan",
+                "expected_evidence",
+                "falsifier",
+                "decision_needed",
+                "result",
+                "evidence",
+                "evidence_readback"
+              ]
+            },
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "ref",
+          "project_id",
+          "turn_id",
+          "change",
+          "truncated_fields"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 512
+    },
+    "unmatched_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 512
+    },
+    "own_call_exclusion": {
+      "type": "string",
+      "enum": [
+        "unavailable",
+        "host_record_excluded"
+      ]
+    },
+    "excluded_call_id": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "incarnation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "sha256",
+          "incarnation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "result_detail": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "sequence": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "id",
+            "sequence",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "source_incarnation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "work_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "content_truncated": {
+          "type": "boolean"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "refused",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "result_record": {
+          "type": "string"
+        },
+        "execution_truncated": {
+          "type": "boolean"
+        },
+        "omissions": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "enum": [
+              "retained_transcript_may_omit_original_output",
+              "result_detail_content_limit",
+              "tool_execution_truncated"
+            ]
+          }
+        }
+      },
+      "required": [
+        "ref",
+        "source_incarnation",
+        "work_session_id",
+        "content",
+        "content_truncated",
+        "outcome",
+        "result_record",
+        "execution_truncated",
+        "omissions"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "identity",
+    "work_session_id",
+    "source_incarnation",
+    "scope",
+    "coverage"
+  ],
+  "additionalProperties": false,
+  "description": "Without result_ref, returns the aggregate review with counts, attempts, evidence and work changes. With result_ref, returns only identity, work_session_id, source_incarnation, scope=retained_result_detail, coverage and result_detail."
+}
