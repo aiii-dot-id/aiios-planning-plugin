@@ -62,6 +62,18 @@ back before KV removal. Storage or archive failures preserve the authoritative
 record. History pagination and measurement limits are explicit in the returned
 coverage. Schemas in `schemas/` define all inputs and outputs.
 
+## Tests
+
+Run the regression suite with the SDK version pinned in `go.mod`:
+
+```sh
+go test -race ./...
+```
+
+The suite exercises registered handlers through the SDK frame transport with
+controlled broker fixtures. It covers failure, evidence and storage boundaries;
+it does not replace installed-host or live provider qualification.
+
 ## Build
 
 Requires Go 1.25 or newer and the SDK version pinned in `go.mod`.
