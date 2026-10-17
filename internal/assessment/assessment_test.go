@@ -292,8 +292,7 @@ func TestRealGoCapture(t *testing.T) {
 		t.Run(fmt.Sprint(broken), func(t *testing.T) {
 			dir := t.TempDir()
 			mod := []byte("module example\n\ngo 1.25\n")
-			// The acceptance test never changes between broken and repaired
-			// candidates. Only the implementation changes.
+
 			checks := []byte("package example\nimport \"testing\"\nfunc TestTruth(t *testing.T) { if Add(2,3)!=5 { t.Fatal(\"wrong sum\") } }\n")
 			body := "package example\nfunc Add(a,b int) int { return a+b }\n"
 			if broken {

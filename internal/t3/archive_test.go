@@ -253,7 +253,7 @@ func TestHistoryPagesAreBoundedAndComplete(t *testing.T) {
 	s, k := setup(t)
 	a := newArchive()
 	s.Files = a
-	// Seed valid immutable archive records without requiring a growing hot set.
+
 	for i := 0; i < 225; i++ {
 		closed(t, s, fmt.Sprintf("p%03d", i), int64(i+1))
 		if err := s.archiveOne(""); err != nil {
@@ -292,7 +292,7 @@ func TestHistoryPagesAreBoundedAndComplete(t *testing.T) {
 	if len(seen) != 225 || pages != 2 {
 		t.Fatal(len(seen), pages)
 	}
-	// A duplicate during interrupted migration must be counted only once.
+
 	raw := a.files[ArchivePath("p000")]
 	var p Plan
 	json.Unmarshal(raw, &p)

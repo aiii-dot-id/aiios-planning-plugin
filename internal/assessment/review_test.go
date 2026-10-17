@@ -119,7 +119,9 @@ func TestReviewOrphanResultsAndResponseBound(t *testing.T) {
 		r.Details.Work = &sdk.InteractionWorkChange{Session: "ws", Plan: &text, Result: &text, EvidenceReadback: &text}
 		f.rows = append(f.rows, r)
 	}
-	if _, err := Review(f, DefaultReviewRequest("ws")); !errors.Is(err, ErrReviewTooLarge) {
+	full := DefaultReviewRequest("ws")
+	full.View = "full"
+	if _, err := Review(f, full); !errors.Is(err, ErrReviewTooLarge) {
 		t.Fatal(err)
 	}
 }
@@ -177,8 +179,7 @@ func TestReviewDescendantsOwnCallAndEvidence(t *testing.T) {
 	if got.Attempts[1].ResultExcerpt != "returned evidence" {
 		t.Fatal(got.Attempts)
 	}
-	// With no host call reference, report the uncertainty instead of dropping a
-	// same-named call or presenting an invented own-call exclusion.
+
 	q.ExcludeCallID = ""
 	got, err = Review(f, q)
 	if err != nil || got.OwnCallExclusion != "unavailable" || got.Counts.RecordedRequests != 4 || got.Counts.Unknown != 1 || got.Coverage.Complete {
@@ -211,6 +212,7 @@ func TestReviewDoesNotAttachMisattributedResultContent(t *testing.T) {
 		t.Run(mismatch, func(t *testing.T) {
 			f := newFixture(sample("passed"), 0)
 			f.rows[5].Content = "unrelated result detail"
+			f.rows[5].Details.ReasonCode = "UNRELATED_REASON"
 			if mismatch == "session" {
 				f.rows[5].Details.WorkSession = "other"
 			} else {
@@ -224,7 +226,7 @@ func TestReviewDoesNotAttachMisattributedResultContent(t *testing.T) {
 				t.Fatal(got)
 			}
 			a := got.Attempts[0]
-			if a.ResultExcerpt != "" || a.ResultRef != nil || a.ResultRecord != "" || a.DurationMS != nil {
+			if a.ResultExcerpt != "" || a.ResultRef != nil || a.ResultRecord != "" || a.DurationMS != nil || a.ReasonCode != "" {
 				t.Fatal("attached unproved result attribution", a)
 			}
 		})

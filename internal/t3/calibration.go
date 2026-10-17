@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -217,14 +218,14 @@ func ValidatePublic(raw []byte) error {
 	for key, value := range fields {
 		if len(key) < 5 || key[:5] != "_host" {
 			if string(value) == "null" {
-				return ErrInvalid
+				return fmt.Errorf("%w: %s must not be null", ErrInvalid, key)
 			}
 		}
 	}
 	if value, present := fields["plan_id"]; present {
 		var id string
 		if json.Unmarshal(value, &id) != nil || !validToken(id, MaxIDBytes) {
-			return ErrInvalid
+			return fmt.Errorf("%w: plan_id must be 1..128 ASCII letters, digits, or ._:-", ErrInvalid)
 		}
 	}
 	mode := "material"
@@ -244,7 +245,17 @@ func ValidatePublic(raw []byte) error {
 		keys = []string{"result_class"}
 	case "advise":
 		keys = []string{"control_class", "history_cursor"}
-	case "material", "status", "abandon":
+	case "material", "status":
+		if _, hasID := fields["plan_id"]; !hasID {
+			keys = []string{"view"}
+			if raw, present := fields["view"]; present {
+				var view string
+				if json.Unmarshal(raw, &view) != nil || (view != "compact" && view != "full") {
+					return ErrInvalid
+				}
+			}
+		}
+	case "abandon":
 	default:
 		return ErrInvalid
 	}
@@ -253,7 +264,7 @@ func ValidatePublic(raw []byte) error {
 	}
 	for k := range fields {
 		if !allowed[k] {
-			return ErrInvalid
+			return fmt.Errorf("%w: field %q is not accepted by mode %q; use only that mode's documented inputs", ErrInvalid, k, mode)
 		}
 	}
 	return nil

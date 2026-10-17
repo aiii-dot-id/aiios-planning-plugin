@@ -2,10 +2,6 @@
 
 package main
 
-// This harness runs the registered handlers over the public SDK frame transport.
-// The broker is simulated and rejects undeclared operations; this does not
-// replace integration testing through an installed host.
-
 import (
 	"bytes"
 	"context"
@@ -27,8 +23,6 @@ import (
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 )
 
-// fakeKV is the broker's key-value store, guarded because the child and
-// the parent both touch it across the frame boundary.
 type fakeKV struct {
 	readOnlyCall func(string, json.RawMessage, json.RawMessage) ([]byte, bool)
 	mu           sync.Mutex
@@ -41,7 +35,6 @@ type fakeKV struct {
 
 func newFakeKV() *fakeKV { return &fakeKV{m: map[string]string{}, files: map[string][]byte{}} }
 
-// call answers one invoke.call. Returns (resultBody, isError).
 func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]byte, bool) {
 	if k.readOnlyCall != nil {
 		return k.readOnlyCall(operation, target, arguments)
@@ -51,8 +44,7 @@ func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]by
 	}
 	switch operation {
 	case "kv.put":
-		// The KEY travels in target; only the VALUE travels in arguments
-		// (hostcall.go:279-283 — InvokeCall("kv.put", {"key":k}, {"value":v})).
+
 		var tgt struct {
 			Key string `json:"key"`
 		}
@@ -87,8 +79,7 @@ func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]by
 		return body, false
 
 	case "kv.get":
-		// Key in target; arguments is nil (hostcall.go:267 —
-		// InvokeCall("kv.get", {"key":key}, nil)).
+
 		var args struct {
 			Key string `json:"key"`
 		}
@@ -108,7 +99,7 @@ func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]by
 		return body, false
 
 	case "kv.delete":
-		// Key in target; arguments is nil (hostcall.go:289).
+
 		var args struct {
 			Key string `json:"key"`
 		}
@@ -126,7 +117,7 @@ func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]by
 		return body, false
 
 	case "kv.list":
-		// Prefix in target; limit in arguments (hostcall.go:302-308).
+
 		var args struct {
 			Prefix string `json:"prefix"`
 		}
@@ -147,16 +138,10 @@ func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]by
 		})
 		return body, false
 	}
-	// Any other reach is a denial, so an undeclared capability cannot
-	// pass unnoticed. A deny is a JSON-RPC error — unlike a missing key,
-	// which is a failed result — and the audited shape
-	// (cmd/aiisdk/harness.go:215-221) is code -32000 with
-	// data.reasonCode, not the failed-result envelope.
+
 	return denyBody("the harness broker grants kv only; " + operation + " is not granted"), true
 }
 
-// denyBody is the broker's capability denial: a JSON-RPC error whose
-// data carries reasonCode (harness.go:215-221).
 func denyBody(message string) []byte {
 	b, _ := json.Marshal(map[string]any{
 		"code":    -32000,
@@ -166,19 +151,6 @@ func denyBody(message string) []byte {
 	return b
 }
 
-// failedBody is the broker's FAILED RESULT — a result body, never a
-// JSON-RPC error. The audited shape (cmd/aiisdk/harness.go:228-234,
-// exercised at pkg/aiiosdk/hostcall_test.go:93):
-//
-//	{"success":false,"ok":false,"status":"failed","reason":R,
-//	 "reasonCode":R,"reason_code":R,"operation_result":null,...}
-//
-// The distinction is load-bearing, not cosmetic: decodeHostReply turns
-// a failed RESULT into an *OperationError carrying reason_code, which
-// is how KVClient.Get reports a missing key as (value "", found false,
-// nil error) — hostcall.go:270. A JSON-RPC error instead surfaces as a
-// transport fault, so the plugin sees a broken broker rather than an
-// absent key.
 func failedBody(code, reason string) []byte {
 	q, _ := json.Marshal(code)
 	r, _ := json.Marshal(reason)
@@ -187,8 +159,6 @@ func failedBody(code, reason string) []byte {
 		`,"reasonCode":` + string(q) + `,"reason_code":` + string(q) +
 		`,"operation_result":null,"external_receipt":{}}`)
 }
-
-// ─── The child: the real plugin, serving ───────────────────────────
 
 func TestNativeHarnessChild(t *testing.T) {
 	if os.Getenv("PLANNING_TEST_CHILD") != "1" {
@@ -208,10 +178,9 @@ func TestNativeHarnessChild(t *testing.T) {
 		os.Exit(2)
 	}
 	fmt.Fprintln(os.Stderr, "CHILD_SERVE_OK")
-	os.Exit(0) // testing's PASS line must not enter the framed stream.
+	os.Exit(0)
 }
 
-// harness starts one child and returns a call function.
 type harness struct {
 	t           *testing.T
 	cmd         *exec.Cmd
@@ -257,7 +226,6 @@ func startHarness(t *testing.T, kv *fakeKV, extraEnv ...string) *harness {
 	return h
 }
 
-// call sends one invoke.call and returns the decoded response.
 func (h *harness) call(operation string, args map[string]any) map[string]json.RawMessage {
 	h.t.Helper()
 	h.nextID++
@@ -293,7 +261,7 @@ func (h *harness) call(operation string, args map[string]any) map[string]json.Ra
 		if err := json.Unmarshal(reply, &obj); err != nil {
 			h.t.Fatal(err)
 		}
-		// A hostcall: answer it from the fake broker and keep reading.
+
 		if method, ok := obj["method"]; ok {
 			if string(method) != `"invoke.call"` {
 				h.t.Fatalf("unexpected method: %s", method)
@@ -322,7 +290,7 @@ func (h *harness) call(operation string, args map[string]any) map[string]json.Ra
 			}
 			continue
 		}
-		// The response to our request.
+
 		var wantID int
 		if err := json.Unmarshal(obj["id"], &wantID); err != nil {
 			h.t.Fatalf("response id not a number: %s", obj["id"])
@@ -334,7 +302,6 @@ func (h *harness) call(operation string, args map[string]any) map[string]json.Ra
 	}
 }
 
-// result decodes a successful operation_result, failing on an error reply.
 func (h *harness) result(operation string, args map[string]any) map[string]any {
 	h.t.Helper()
 	obj := h.call(operation, args)
@@ -364,7 +331,6 @@ func (h *harness) result(operation string, args map[string]any) map[string]any {
 	return out
 }
 
-// failure returns the refusal reason for an operation that should fail.
 func (h *harness) failure(operation string, args map[string]any) string {
 	h.t.Helper()
 	obj := h.call(operation, args)
@@ -402,8 +368,6 @@ func (h *harness) failure(operation string, args map[string]any) string {
 	h.t.Fatalf("%s was expected to fail but answered: %s", operation, raw)
 	return ""
 }
-
-// ─── The end-to-end journey ────────────────────────────────────────
 
 func TestNativeCalibratedJourney(t *testing.T) {
 	h := startHarness(t, newFakeKV())

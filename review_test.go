@@ -16,7 +16,7 @@ import (
 )
 
 func TestReviewInputAndSchemas(t *testing.T) {
-	for _, raw := range []string{`{}`, `null`, `[]`, `{"work_session_id":null}`, `{"work_session_id":"ws","read_limit":0}`, `{"work_session_id":"ws","identity":"another"}`, `{"work_session_id":"ws","Work_session_id":"other"}`, `{"work_session_id":"ws","work_session_id":"other"}`, `{"work_session_id":"ws","read_limit":1.5}`} {
+	for _, raw := range []string{`null`, `[]`, `{"work_session_id":null}`, `{"work_session_id":"ws","read_limit":0}`, `{"work_session_id":"ws","identity":"another"}`, `{"work_session_id":"ws","Work_session_id":"other"}`, `{"work_session_id":"ws","work_session_id":"other"}`, `{"work_session_id":"ws","read_limit":1.5}`} {
 		if _, err := parseReview([]byte(raw)); !errors.Is(err, assessment.ErrInvalid) {
 			t.Fatalf("accepted %s: %v", raw, err)
 		}
@@ -82,7 +82,7 @@ func TestNativeReviewIsReadOnlyAndPreservesDenial(t *testing.T) {
 				}
 				return
 			}
-			got := h.result("review", map[string]any{"work_session_id": "ws"})
+			got := h.result("review", map[string]any{"work_session_id": "ws", "view": "full"})
 			counts := got["counts"].(map[string]any)
 			if counts["failed"] != float64(1) || counts["succeeded"] != float64(0) || reads != 2 || k.puts != 0 {
 				t.Fatal(got, reads, k.puts)
@@ -175,7 +175,7 @@ func TestNativePlanOversizeRecoveryUsesReview(t *testing.T) {
 	}
 	h := startHarness(t, k)
 	h.workSession = map[string]any{"id": "ws", "call_id": "current-call"}
-	response := h.call("plan", map[string]any{})
+	response := h.call("plan", map[string]any{"view": "full"})
 	var failure struct {
 		Status     string `json:"status"`
 		ReasonCode string `json:"reasonCode"`
@@ -195,6 +195,7 @@ func TestNativePlanOversizeRecoveryUsesReview(t *testing.T) {
 	if err := json.Unmarshal([]byte(failure.Reason[start:end+1]), &recovery); err != nil {
 		t.Fatal(err)
 	}
+	recovery["view"] = "full"
 	got := h.result("review", recovery)
 	encoded, err := json.Marshal(got)
 	if err != nil || len(encoded) > assessment.MaxReviewBytes {
@@ -277,7 +278,7 @@ func TestNativeCurrentMaterialUsesHostWorkWithoutRegistration(t *testing.T) {
 				t.Fatal(reads, k.puts, k.m, k.files)
 			}
 			h.workSession = nil
-			if code := h.failure("plan", map[string]any{}); code != "OPERATION_ARGUMENT_INVALID" {
+			if code := h.failure("plan", map[string]any{}); code != "REVIEW_UNAVAILABLE" {
 				t.Fatal(code)
 			}
 			h.workSession = map[string]any{"id": "ws", "call_id": "own-call"}
@@ -330,7 +331,7 @@ func TestNativeBeginCanUseHostCallIDWithoutInventingDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("PLAN_SCHEMA_PROOF %s", b)
-	// The old explicit-ID input still needs no new current-work envelope.
+
 	h.workSession = nil
 	args["plan_id"] = "explicit"
 	got = h.result("plan", args)

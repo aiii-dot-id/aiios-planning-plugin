@@ -10,8 +10,6 @@ import (
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 )
 
-// detailFixture serves the enriched record under its transport hash. That hash
-// differs from RecordRef, which intentionally excludes mutable annotations.
 type detailFixture struct {
 	*fixture
 	full     sdk.InteractionRecord
@@ -63,7 +61,7 @@ func detailRequest(r sdk.InteractionRecord) ReviewRequest {
 func TestReviewExactResultKeepsRecordAndUsesTransportHash(t *testing.T) {
 	f := newFixture(sample("failed"), 1)
 	r := f.rows[5]
-	r.Content = "→ shell(" + strings.Repeat("argument", 40) + ")\n← prerequisite missing\n[exit status 1]"
+	r.Content = "→ shell(" + strings.Repeat("argument", 80) + ")\n← prerequisite missing\n[exit status 1]"
 	r.Annotations = map[string]json.RawMessage{"note": json.RawMessage(`{"text":"mutable note"}`)}
 	f.rows[5] = r
 	reader := &detailFixture{fixture: f, full: r}
@@ -169,7 +167,7 @@ func TestReviewResultDetailLimitsAndRefusedOutcome(t *testing.T) {
 	if raw, _ := json.Marshal(got); len(raw) > MaxReviewBytes {
 		t.Fatal("oversized detail response")
 	}
-	// Escape expansion and the ordinary report share the same final byte budget.
+
 	r.Content = strings.Repeat("<", MaxResultDetailRunes)
 	f.rows[5] = r
 	q = detailRequest(r)
@@ -223,7 +221,7 @@ func TestReviewDetailChunkBudgetAndStableReference(t *testing.T) {
 	f.rows[5] = r
 	reader := &detailFixture{fixture: f, full: r}
 	q := detailRequest(r)
-	q.ReadLimit = 3 // cutoff, session page, then only the first detail chunk.
+	q.ReadLimit = 3
 	if _, err := Review(reader, q); !errors.Is(err, ErrResultUnavailable) || reader.reads != 1 {
 		t.Fatal("partial record was exposed", err, reader.reads)
 	}

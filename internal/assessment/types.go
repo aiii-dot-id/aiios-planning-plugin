@@ -97,6 +97,7 @@ type Attempt struct {
 	ProjectID              string           `json:"project_id"`
 	ResultID               string           `json:"result_id,omitempty"`
 	Outcome                string           `json:"outcome"`
+	ReasonCode             string           `json:"reason_code,omitempty"`
 	DurationMS             *int64           `json:"duration_ms,omitempty"`
 }
 

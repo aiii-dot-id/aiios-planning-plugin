@@ -39,6 +39,7 @@ func TestNativeReviewAdvertisedDetailRoute(t *testing.T) {
 		{ID: "call", Sequence: 1, Kind: sdk.InteractionToolCall, ProjectID: "p", TurnID: "turn", Source: source, Details: sdk.InteractionDetails{WorkSession: "ws", Tool: "shell"}},
 		{ID: "result", Sequence: 2, Kind: sdk.InteractionToolResult, ProjectID: "p", TurnID: "turn", Source: source, RelatedID: "call", Outcome: sdk.InteractionFailed, Content: strings.Repeat("<", assessment.MaxResultDetailRunes-19) + "exact failure cause", Details: sdk.InteractionDetails{WorkSession: "ws", Tool: "shell"}},
 	}
+	rows[1].Details.ReasonCode = "RECORDED_FAILURE"
 	for i := uint64(3); i < 12; i++ {
 		text := strings.Repeat("界", 300)
 		rows = append(rows, sdk.InteractionRecord{ID: fmt.Sprint("work-", i), Sequence: i, Kind: sdk.InteractionNotice, Details: sdk.InteractionDetails{WorkSession: "ws", Work: &sdk.InteractionWorkChange{Session: "ws", Plan: &text, Result: &text, EvidenceReadback: &text}}})
@@ -71,11 +72,22 @@ func TestNativeReviewAdvertisedDetailRoute(t *testing.T) {
 	first := h.result("review", map[string]any{})
 	firstRaw, _ := json.Marshal(first)
 	t.Logf("REVIEW_SCHEMA_PROOF %s", firstRaw)
-	route := first["attempts"].([]any)[0].(map[string]any)["result_detail_request"].(map[string]any)
+	route := first["diagnostics"].([]any)[0].(map[string]any)["result_detail_request"].(map[string]any)
+	attempt := first["diagnostics"].([]any)[0].(map[string]any)
+	if attempt["reason_code"] != "RECORDED_FAILURE" || !strings.HasSuffix(attempt["result_excerpt"].(string), "exact failure cause") {
+		t.Fatal("handler lost structured reason or trailing diagnostic", attempt)
+	}
+	material := h.result("plan", map[string]any{})
+	materialAttempt := material["review"].(map[string]any)["diagnostics"].([]any)[0].(map[string]any)
+	if materialAttempt["reason_code"] != attempt["reason_code"] || materialAttempt["result_excerpt"] != attempt["result_excerpt"] {
+		t.Fatal("current material lost the review diagnostics", materialAttempt)
+	}
+	materialRaw, _ := json.Marshal(material)
+	t.Logf("PLAN_SCHEMA_PROOF %s", materialRaw)
 	h.workSession = map[string]any{"id": "later-work"}
 	got := h.result("review", route)
 	detail := got["result_detail"].(map[string]any)
-	if detail["content"] != rows[1].Content || detail["work_session_id"] != "ws" || k.puts != 0 {
+	if detail["content"] != rows[1].Content || detail["work_session_id"] != "ws" || detail["reason_code"] != "RECORDED_FAILURE" || k.puts != 0 {
 		t.Fatal(got, k.puts)
 	}
 	raw, _ := json.Marshal(got)

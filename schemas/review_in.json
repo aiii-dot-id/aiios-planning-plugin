@@ -60,7 +60,17 @@
       ],
       "additionalProperties": false,
       "description": "Exact result reference from a prior review. Use its result_detail_request, which also binds the original work session and source incarnation. Returns bounded retained transcript text, not reconstructed raw output."
+    },
+    "view": {
+      "type": "string",
+      "enum": [
+        "compact",
+        "full"
+      ],
+      "default": "compact",
+      "description": "Compact current work and non-success diagnostics by default. full returns the prior complete bounded review shape. Ignored for exact result detail."
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "description": "Read existing recorded work without creating a task. Omit work_session_id only when the host has an acting core work session. Otherwise supply an existing work_session_id; for new work use core work action=start description=... first."
 }

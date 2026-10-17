@@ -46,8 +46,7 @@ func TestSharedMeasurementCodec(t *testing.T) {
 	if _, err := decodeShared(strings.Repeat(" ", MaxRecordBytes) + string(raw)); err == nil {
 		t.Fatal("oversize")
 	}
-	// Conservative encoding envelope, not a claim that simultaneous maximum
-	// counter values are reachable. Every variable-width token is at its bound.
+
 	c = newShared(strings.Repeat("s", 128), MaxCounter)
 	c.Last = &deliveryFingerprint{MaxCounter, strings.Repeat("f", 64)}
 	for i := 0; i < 200; i++ {
@@ -58,7 +57,7 @@ func TestSharedMeasurementCodec(t *testing.T) {
 	if err != nil || len(raw) != 60514 || len(raw) > MaxRecordBytes {
 		t.Fatal(len(raw), err)
 	}
-	// A reachable full working set must pass validation too.
+
 	c = newShared("g1", 0)
 	for i := 0; i < 200; i++ {
 		id := fmt.Sprintf("s%d", i)
@@ -84,8 +83,7 @@ func TestSharedMeasurementCodec(t *testing.T) {
 }
 
 func TestSharedMeasurementOracle(t *testing.T) {
-	// Fixed PCG generator and draw order. The oracle filters the original event
-	// list; it never calls checkpoint arithmetic to obtain expected results.
+
 	rng := rand.New(rand.NewPCG(92426, 2))
 	intervals := 0
 	for trial := 0; trial < 120; trial++ {
@@ -253,8 +251,7 @@ func TestSharedMeasurementReadiness(t *testing.T) {
 
 func TestSharedMeasurementLegacy(t *testing.T) {
 	s, k := setup(t)
-	// Actual legacy serialization with a matched-event fingerprint, rather than
-	// removing version fields from a v2 shared record and calling it legacy.
+
 	p := &Plan{ID: "old", Family: "f", SessionID: "ws", FalsifierClass: "failed", ExpectedEvidenceClass: "passed", ConsequenceClass: "local", DeclaredSteps: 1, BudgetCalls: 10, State: "closed", OpenedMs: 1, ClosedMs: 3, HostCalibration: "complete", Steps: []Step{{ID: "s1", State: "applied", Applied: 1}}, ObservedCalls: uintPtr(1), Measurement: &Measurement{Stream: "old", Start: 0, Count: 1, Cursor: 1, LastHash: strings.Repeat("a", 64), End: uintPtr(1), Result: "passed"}}
 	if err := Save(k, p); err != nil {
 		t.Fatal(err)

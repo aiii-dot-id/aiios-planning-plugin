@@ -309,6 +309,9 @@ func boolPtr(v bool) *bool { return &v }
 func Reason(err error) string {
 	switch {
 	case errors.Is(err, ErrInvalid):
+		if err != ErrInvalid {
+			return err.Error()
+		}
 		return "arguments must contain only identifiers, classes, counts, and enums"
 	case errors.Is(err, ErrNotFound):
 		return "no T3 plan with that id"

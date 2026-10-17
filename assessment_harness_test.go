@@ -2,9 +2,6 @@
 
 package main
 
-// This isolated fixture crosses the real SDK frame transport. The broker and
-// its captured records are controlled test inputs, not live provenance proof.
-// No assessment operation is added to the shipped plugin descriptor.
 import (
 	"encoding/base64"
 	"encoding/json"
@@ -48,8 +45,7 @@ func assessmentFixturePlugin(t *testing.T, raw []byte) *sdk.Plugin {
 
 func TestAssessmentSDKReadOnlyJourney(t *testing.T) {
 	zero := 0
-	// A known, non-mutating fixture supplies the actual Go JSON bytes. The
-	// corresponding interaction records below are explicitly synthetic.
+
 	dir := t.TempDir()
 	mod := []byte("module example\n\ngo 1.25\n")
 	code := []byte("package example\nimport \"testing\"\nfunc TestTruth(t *testing.T) {}\n")

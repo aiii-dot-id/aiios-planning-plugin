@@ -267,16 +267,15 @@ func (c *collection) collect() error {
 				if c.sessionOnly {
 					ref := RecordRef(r)
 					a.ResultRef = &ref
-					a.ResultExcerpt = r.Content
-					if runes := []rune(r.Content); len(runes) > 256 {
-						a.ResultExcerpt = string(runes[:256])
-						a.ResultExcerptTruncated = true
+					a.ResultExcerpt, a.ResultExcerptTruncated = resultExcerpt(r.Content, r.Outcome)
+					if a.ResultExcerptTruncated {
 						a.ResultDetailRequest = &ResultSelection{WorkSession: a.WorkSession, SourceIncarnation: c.out.SourceIncarnation, ResultRef: ref}
 					}
 					a.ResultRecord = r.Details.ResultRecord
 					a.ResultTruncated = r.Details.Truncated
 				}
 				a.Outcome = string(r.Outcome)
+				a.ReasonCode = r.Details.ReasonCode
 				a.DurationMS = r.Details.DurationMS
 				if a.DurationMS != nil && *a.DurationMS < 0 {
 					return protocol("negative duration")
@@ -286,6 +285,24 @@ func (c *collection) collect() error {
 		c.out.Attempts = append(c.out.Attempts, a)
 	}
 	return nil
+}
+
+func resultExcerpt(content string, outcome sdk.InteractionOutcome) (string, bool) {
+	runes := []rune(content)
+	if outcome == sdk.InteractionSucceeded {
+		if len(runes) > 256 {
+			return string(runes[:256]), true
+		}
+		return content, false
+	}
+	if len(runes) <= 512 {
+		return content, false
+	}
+
+	const marker = "\n[... middle omitted ...]\n"
+	const prefix = 128
+	tail := 512 - prefix - len([]rune(marker))
+	return string(runes[:prefix]) + marker + string(runes[len(runes)-tail:]), true
 }
 
 func (c *collection) finish(receipt Capture) Result {

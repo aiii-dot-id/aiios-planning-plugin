@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -177,17 +178,29 @@ func validToken(v string, max int) bool {
 func Count(v int, min, max int) bool { return v >= min && v <= max }
 
 func ValidBegin(p *Plan) error {
-	if !validToken(p.ID, MaxIDBytes) || !validToken(p.Family, MaxIDBytes) || !validToken(p.SessionID, MaxIDBytes) {
-		return ErrInvalid
+	for _, field := range []struct {
+		name, value string
+		max         int
+	}{
+		{"plan_id", p.ID, MaxIDBytes}, {"family", p.Family, MaxIDBytes}, {"session_id", p.SessionID, MaxIDBytes},
+		{"falsifier_class", p.FalsifierClass, MaxClassBytes}, {"expected_evidence_class", p.ExpectedEvidenceClass, MaxClassBytes}, {"consequence_class", p.ConsequenceClass, MaxClassBytes},
+	} {
+		if !validToken(field.value, field.max) {
+			return fmt.Errorf("%w: %s must be 1..%d ASCII letters, digits, or ._:-; use a short label, not prose", ErrInvalid, field.name, field.max)
+		}
 	}
-	if !validToken(p.FalsifierClass, MaxClassBytes) || !validToken(p.ExpectedEvidenceClass, MaxClassBytes) || !validToken(p.ConsequenceClass, MaxClassBytes) {
-		return ErrInvalid
+	if !Count(p.DeclaredSteps, 1, 256) {
+		return fmt.Errorf("%w: declared_steps must be an integer from 1 to 256", ErrInvalid)
 	}
-	if !Count(p.DeclaredSteps, 1, 256) || !Count(p.BudgetCalls, 1, 100000) || p.ObservedCalls != nil {
-		return ErrInvalid
+	if !Count(p.BudgetCalls, 1, 100000) {
+		return fmt.Errorf("%w: budget_calls must be an integer from 1 to 100000", ErrInvalid)
+	}
+	if p.ObservedCalls != nil {
+		return fmt.Errorf("%w: observed_calls is host-owned and cannot be supplied to begin", ErrInvalid)
 	}
 	return nil
 }
+
 func ValidStep(s Step) bool {
 	return validToken(s.ID, MaxIDBytes) && (s.State == "planned" || s.State == "applied") && s.Applied >= 0
 }

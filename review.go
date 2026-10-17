@@ -12,7 +12,7 @@ import (
 
 func registerReview(p *sdk.Plugin) {
 	p.Describe("review", sdk.Descriptor{
-		Summary: "Review recorded tool calls, outcomes and evidence for the current work and its proven descendants. For a clipped result excerpt, call review with its result_detail_request to read bounded retained transcript text. Request text may be clipped: do not infer unseen arguments. A refusal is the host check's diagnostic, not proof of filesystem access. If it cannot distinguish inline program text from a path, use its suggested program-file route; do not claim an actual outside path was accessed. Does not verify task correctness or grade a plan.",
+		Summary: "Requires an existing core work session, supplied by the host or work_session_id; for new work use core work action=start description=... first. Resume uncertain work or inspect repeated failures: current work, coverage, retained request counts and recent non-success diagnostics with exact evidence. Compact by default; view=full restores the complete bounded review, and result_detail_request reads one result. Host success does not establish command or task correctness. No new plan or grade.",
 		Family:  "plan", Primary: true, Keywords: []string{"history", "work", "outcomes", "review"},
 		Effects: sdk.EffectsReadInternal, Capabilities: []string{"interaction.read"},
 		Input: "schemas/review_in.json", Output: "schemas/review_out.json", MaxResultBytes: assessment.MaxReviewBytes,
@@ -57,6 +57,10 @@ func parseReviewContext(raw []byte, context sdk.WorkSession) (assessment.ReviewR
 			return q, assessment.ErrInvalid
 		}
 		switch k {
+		case "view":
+			if json.Unmarshal(v, &q.View) != nil || (q.View != "compact" && q.View != "full") {
+				return q, assessment.ErrInvalid
+			}
 		case "work_session_id":
 			if json.Unmarshal(v, &q.WorkSession) != nil {
 				return q, assessment.ErrInvalid
@@ -90,6 +94,9 @@ func parseReviewContext(raw []byte, context sdk.WorkSession) (assessment.ReviewR
 		default:
 			return q, assessment.ErrInvalid
 		}
+	}
+	if q.WorkSession == "" && !explicitSession {
+		return q, sdk.Fail("REVIEW_UNAVAILABLE", currentWorkRequirement(context.Reason))
 	}
 	return q, q.Validate()
 }

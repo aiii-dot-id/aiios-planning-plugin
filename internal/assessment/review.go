@@ -29,12 +29,14 @@ type ResultDetail struct {
 	Content            string   `json:"content"`
 	ContentTruncated   bool     `json:"content_truncated"`
 	Outcome            string   `json:"outcome"`
+	ReasonCode         string   `json:"reason_code,omitempty"`
 	ResultRecord       string   `json:"result_record"`
 	ExecutionTruncated bool     `json:"execution_truncated"`
 	Omissions          []string `json:"omissions"`
 }
 
 type ReviewRequest struct {
+	View               string `json:"view,omitempty"`
 	IncludeDescendants bool   `json:"include_descendants,omitempty"`
 	ExcludeCallID      string `json:"-"`
 	WorkSession        string `json:"work_session_id"`
@@ -46,10 +48,13 @@ type ReviewRequest struct {
 }
 
 func DefaultReviewRequest(session string) ReviewRequest {
-	return ReviewRequest{WorkSession: session, ReadLimit: 32, RecordLimit: 128, DetailLimit: 256 << 10}
+	return ReviewRequest{View: "compact", WorkSession: session, ReadLimit: 32, RecordLimit: 128, DetailLimit: 256 << 10}
 }
 
 func (q ReviewRequest) Validate() error {
+	if q.View != "" && q.View != "compact" && q.View != "full" {
+		return ErrInvalid
+	}
 	if (q.ResultRef == nil) != (q.SourceIncarnation == "") || len(q.SourceIncarnation) > 256 {
 		return ErrInvalid
 	}
@@ -87,6 +92,7 @@ type WorkFact struct {
 }
 
 type ReviewResult struct {
+	Request           ReviewRequest           `json:"-"`
 	OwnCallExclusion  string                  `json:"own_call_exclusion"`
 	ExcludedCallID    string                  `json:"excluded_call_id,omitempty"`
 	Evidence          []sdk.MemoryEvidenceRef `json:"evidence"`
@@ -114,6 +120,9 @@ func (r ReviewResult) MarshalJSON() ([]byte, error) {
 			ResultDetail      *ResultDetail `json:"result_detail"`
 		}{r.Identity, r.WorkSession, r.SourceIncarnation, r.Scope, r.Coverage, r.ResultDetail})
 	}
+	if r.Request.View == "compact" {
+		return json.Marshal(r.Compact())
+	}
 	type aggregate ReviewResult
 	return json.Marshal(aggregate(r))
 }
@@ -137,7 +146,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 	if q.ResultRef != nil && q.SourceIncarnation != c.out.SourceIncarnation {
 		return ReviewResult{}, ErrSourceChanged
 	}
-	out := ReviewResult{Identity: c.q.Identity, WorkSession: q.WorkSession, SourceIncarnation: c.out.SourceIncarnation, Scope: "retained_session_without_descendants", CountBasis: "retained_recorded_requests", Attempts: c.out.Attempts, UnmatchedResults: []Ref{}, WorkChanges: []WorkFact{}}
+	out := ReviewResult{Request: q, Identity: c.q.Identity, WorkSession: q.WorkSession, SourceIncarnation: c.out.SourceIncarnation, Scope: "retained_session_without_descendants", CountBasis: "retained_recorded_requests", Attempts: c.out.Attempts, UnmatchedResults: []Ref{}, WorkChanges: []WorkFact{}}
 	out.OwnCallExclusion = "unavailable"
 	out.Evidence = []sdk.MemoryEvidenceRef{}
 	if q.ExcludeCallID != "" {
@@ -219,7 +228,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 				return ReviewResult{}, ErrConflict
 			}
 			r := c.seen[a.ResultRef.ID]
-			detail := &ResultDetail{Ref: *a.ResultRef, SourceIncarnation: out.SourceIncarnation, WorkSession: a.WorkSession, Content: r.Content, Outcome: a.Outcome, ResultRecord: r.Details.ResultRecord, ExecutionTruncated: r.Details.Truncated, Omissions: []string{"retained_transcript_may_omit_original_output"}}
+			detail := &ResultDetail{Ref: *a.ResultRef, SourceIncarnation: out.SourceIncarnation, WorkSession: a.WorkSession, Content: r.Content, Outcome: a.Outcome, ReasonCode: r.Details.ReasonCode, ResultRecord: r.Details.ResultRecord, ExecutionTruncated: r.Details.Truncated, Omissions: []string{"retained_transcript_may_omit_original_output"}}
 			if runes := []rune(detail.Content); len(runes) > MaxResultDetailRunes {
 				detail.Content = string(runes[:MaxResultDetailRunes])
 				detail.ContentTruncated = true

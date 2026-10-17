@@ -1,6 +1,6 @@
 {
   "id": "id.aeon.planning",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "plugin_family": "tool_bridge",
   "publisher": "AI Identity Incorporated",
   "title": "Aeon Planning",
@@ -8,7 +8,7 @@
   "license": "Apache-2.0",
   "interface": {
     "id": "id.aeon.planning.core",
-    "version": 1
+    "version": 2
   },
   "capability_envelope": [
     "ring4.kv",

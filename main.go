@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 	"github.com/aiii-dot-id/aiios-planning-plugin/internal/assessment"
 	"github.com/aiii-dot-id/aiios-planning-plugin/internal/t3"
-	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 )
 
 const pluginID = "id.aeon.planning"
@@ -32,11 +33,11 @@ func newPlanningPlugin() *sdk.Plugin {
 	service := t3.NewService(t3KV{})
 	service.Files = privateArchive{}
 	p.Describe("plan", sdk.Descriptor{
-		Summary: "Read current work and recorded evidence without registering another task. Material is the default. Existing begin, apply, grade, advise, status and abandon modes retain explicit bounded-plan calibration; abandon closes unresolved work without inventing a grade.",
+		Summary: "Current-work reads require an existing core work session; use work action=start description=... to open one, or review with an existing work_session_id. begin registers optional calibration in that session, not a new task. Read current work and recorded evidence without registering another task. Compact material is the default; view=full retains the complete bounded evidence. Prefer review for current work and failure inspection. Existing begin, apply, grade, advise, status and abandon modes retain explicit bounded-plan calibration; abandon closes unresolved work without inventing a grade.",
 		Effects: sdk.EffectsWriteLocal,
 		Input:   "schemas/plan_in.json", Output: "schemas/plan_out.json",
 		Capabilities: []string{kvCapability, "fs.private", "interaction.read"},
-		Family:       "plan", Primary: true,
+		Family:       "plan", Primary: false,
 		Keywords: []string{"plan", "pre-register", "grade", "advice"},
 	})
 	p.Handle("plan", func(c sdk.Call) (any, error) {
@@ -56,14 +57,20 @@ func newPlanningPlugin() *sdk.Plugin {
 		work := c.WorkSession()
 		if mode == "material" || mode == "status" {
 			if _, hasID := args.String("plan_id"); !hasID {
+				if work.ID == "" {
+					return nil, sdk.Fail("REVIEW_UNAVAILABLE", currentWorkRequirement(work.Reason))
+				}
 				q := assessment.DefaultReviewRequest(work.ID)
+				if view, ok := args.String("view"); ok {
+					q.View = view
+				}
 				q.IncludeDescendants = true
 				q.ExcludeCallID = work.CallID
 				review, e := assessment.Review(sdk.Interactions, q)
 				if e != nil {
 					return nil, reviewFailure(e)
 				}
-				raw, e := json.Marshal(map[string]any{"current_work": assessment.CurrentWork(review), "review": review})
+				raw, e := json.Marshal(review.Material())
 				if e == nil && len(raw) > assessment.MaxReviewBytes {
 					return nil, reviewFailure(assessment.ErrReviewTooLarge)
 				}
@@ -75,6 +82,9 @@ func newPlanningPlugin() *sdk.Plugin {
 		}
 		switch mode {
 		case "begin":
+			if host.Session == "" {
+				return nil, sdk.Fail("CALIBRATION_SESSION_REFUSED", currentWorkRequirement(host.Reason))
+			}
 			id, ok1 := args.String("plan_id")
 			if !ok1 && work.CallID != "" {
 				id, ok1 = "plan_"+work.CallID, true
@@ -83,7 +93,7 @@ func newPlanningPlugin() *sdk.Plugin {
 				return nil, t3Failure(t3.ErrSession)
 			}
 			family, ok2 := args.String("family")
-			session, ok3 := host.Session, host.Session != ""
+			session := host.Session
 			if asserted, present := args.String("session_id"); present && asserted != session {
 				return nil, t3Failure(t3.ErrSession)
 			}
@@ -92,8 +102,18 @@ func newPlanningPlugin() *sdk.Plugin {
 			consequence, ok6 := args.String("consequence_class")
 			steps, ok7 := args.Int("declared_steps")
 			budget, ok8 := args.Int("budget_calls")
-			if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 {
-				return nil, t3Failure(t3.ErrInvalid)
+			for _, field := range []struct {
+				name, requirement string
+				ok                bool
+			}{
+				{"plan_id", "a string, or omitted only when the host supplies a call reference", ok1},
+				{"family", "a string", ok2}, {"falsifier_class", "a string", ok4},
+				{"expected_evidence_class", "a string", ok5}, {"consequence_class", "a string", ok6},
+				{"declared_steps", "an integer from 1 to 256", ok7}, {"budget_calls", "an integer from 1 to 100000", ok8},
+			} {
+				if !field.ok {
+					return nil, t3Failure(fmt.Errorf("%w: begin requires %s to be %s", t3.ErrInvalid, field.name, field.requirement))
+				}
 			}
 			pl, err := service.Begin(t3.Plan{ID: id, Family: family, SessionID: session, FalsifierClass: falsifier, ExpectedEvidenceClass: expected, ConsequenceClass: consequence, DeclaredSteps: int(steps), BudgetCalls: int(budget)}, nowMillis(c))
 			if err != nil {
@@ -202,4 +222,11 @@ func t3Failure(err error) error {
 		code = "CALIBRATION_UNAVAILABLE"
 	}
 	return sdk.Fail(code, t3.Reason(err))
+}
+
+func currentWorkRequirement(reason string) string {
+	if reason == "session_lookup_failed" {
+		return "the host could not look up the acting work session; resolve that lookup failure before retrying; do not invent a session ID or start replacement work"
+	}
+	return "no acting work session: for new work use core work action=start description=... first, then retry; review can instead read an existing work_session_id; Planning begin does not open core work"
 }

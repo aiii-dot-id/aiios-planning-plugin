@@ -197,7 +197,7 @@ func TestSharedMeasurementFailedReservationsBounded(t *testing.T) {
 		if err = c.reserve("ws", uint64(i)); err != nil {
 			t.Fatal(err)
 		}
-		s.refs = nil // reservation committed, plan write did not commit
+		s.refs = nil
 		if err = s.saveShared(c); err != nil {
 			t.Fatal(err)
 		}
@@ -218,7 +218,7 @@ func TestSharedMeasurementCapacityAndRollover(t *testing.T) {
 	if err := s.Observe(event(1, "ws")); err != nil {
 		t.Fatal(err)
 	}
-	// Both plans own the start. Closing one must retain the other's checkpoint.
+
 	apply(t, s)
 	s.Context.Emitted = 1
 	s.Context.Settled = 1
@@ -233,7 +233,7 @@ func TestSharedMeasurementCapacityAndRollover(t *testing.T) {
 		t.Fatal("shared start removed", err)
 	}
 	before := cloneKV(k)
-	// A namespace that cannot grow must preserve source throughout refusal.
+
 	used := 0
 	for _, v := range k.rows {
 		used += len(v)
@@ -387,8 +387,7 @@ func TestSharedMeasurementRolloverHeadroom(t *testing.T) {
 		} else if err != nil {
 			t.Fatal(limit, err)
 		}
-		// Every failure retains an inline snapshot or its still-live source;
-		// restoring headroom must resume without losing either plan's facts.
+
 		trial.limit = 1 << 20
 		s = resume(trial, ctx)
 		if err := rollover(s); err != nil {
