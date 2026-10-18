@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "properties": {
+    "work_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_.:-]+$",
+      "description": "Defaults to the host-stamped current work session. Explicit sessions retain single-session scope unless include_descendants is true."
+    },
+    "read_limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128,
+      "default": 32
+    },
+    "record_limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 512,
+      "default": 128
+    },
+    "detail_limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1048576,
+      "default": 262144
+    },
+    "include_descendants": {
+      "type": "boolean",
+      "description": "Include only host-proven descendant work sessions. Defaults true for the current implicit session and false for an explicitly selected session."
+    },
+    "source_incarnation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Required with result_ref; copy the source_incarnation from the original review."
+    },
+    "result_ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sequence": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "sequence",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "description": "Exact result reference from a prior review. Use its result_detail_request, which also binds the original work session and source incarnation. Returns bounded retained transcript text, not reconstructed raw output."
+    },
+    "view": {
+      "type": "string",
+      "enum": [
+        "compact",
+        "full"
+      ],
+      "default": "compact",
+      "description": "Compact current work and non-success diagnostics by default. full returns the prior complete bounded review shape. Ignored for exact result detail."
+    }
+  },
+  "additionalProperties": false,
+  "description": "Read existing recorded work without creating a task. Omit work_session_id only when the host has an acting core work session. Otherwise supply an existing work_session_id; for new work use core work action=start description=... first."
+}

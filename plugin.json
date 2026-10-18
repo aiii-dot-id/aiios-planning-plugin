@@ -1,0 +1,57 @@
+{
+  "id": "id.aeon.planning",
+  "version": "0.8.0",
+  "plugin_family": "tool_bridge",
+  "publisher": "AI Identity Incorporated",
+  "title": "Aeon Planning",
+  "description": "Current work material, recorded request reviews and bounded planning calibration.",
+  "license": "Apache-2.0",
+  "interface": {
+    "id": "id.aeon.planning.core",
+    "version": 2
+  },
+  "capability_envelope": [
+    "ring4.kv",
+    "fs.private",
+    "interaction.read"
+  ],
+  "variants": [
+    {
+      "variant_id": "linux-x86_64-native",
+      "platform": "linux",
+      "arch": "x86_64",
+      "topology": "full_identity_host",
+      "execution_runtime": "native_t3_component",
+      "admission_profile": "platform_reserved",
+      "variant_capabilities": [
+        "ring4.kv",
+        "fs.private",
+        "interaction.read"
+      ],
+      "artifact": "dist/id.aeon.planning-linux-x86_64"
+    },
+    {
+      "variant_id": "macos-arm64-native",
+      "platform": "macos",
+      "arch": "arm64",
+      "topology": "full_identity_host",
+      "execution_runtime": "native_t3_component",
+      "admission_profile": "platform_reserved",
+      "variant_capabilities": [
+        "ring4.kv",
+        "fs.private",
+        "interaction.read"
+      ],
+      "artifact": "dist/id.aeon.planning-macos-arm64"
+    }
+  ],
+  "subscriptions": [
+    {
+      "topic": "tool.called",
+      "operation": "observe",
+      "delivery": "calibration_v1"
+    }
+  ],
+  "homepage": "https://github.com/aiii-dot-id/aiios-planning-plugin",
+  "aiios_min_version": "0.1.19"
+}
