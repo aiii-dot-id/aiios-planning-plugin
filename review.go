@@ -12,7 +12,7 @@ import (
 
 func registerReview(p *sdk.Plugin) {
 	p.Describe("review", sdk.Descriptor{
-		Summary: "Requires an existing core work session, supplied by the host or work_session_id; for new work use core work action=start description=... first. Resume uncertain work or inspect repeated failures: current work, coverage, retained request counts and recent non-success diagnostics with exact evidence. Compact by default; view=full restores the complete bounded review, and result_detail_request reads one result. Host success does not establish command or task correctness. No new plan or grade.",
+		Summary: "Requires an existing core work session, supplied by the host or work_session_id; for new work use core work action=start description=... first. Resume uncertain work or inspect repeated failures: current work, coverage, retained request counts and recent non-success diagnostics with exact evidence. Compact by default; view=full restores the complete bounded review. Pass result_detail_request to read one result, or an entry of work_detail_requests for a whole clipped authored field. Host success does not establish command or task correctness. No new plan or grade.",
 		Family:  "plan", Primary: true, Keywords: []string{"history", "work", "outcomes", "review"},
 		Effects: sdk.EffectsReadInternal, Capabilities: []string{"interaction.read"},
 		Input: "schemas/review_in.json", Output: "schemas/review_out.json", MaxResultBytes: assessment.MaxReviewBytes,
@@ -37,11 +37,11 @@ func parseReview(raw []byte) (assessment.ReviewRequest, error) {
 
 func parseReviewContext(raw []byte, context sdk.WorkSession) (assessment.ReviewRequest, error) {
 	if sdk.ValidateStrict(raw) != nil {
-		return assessment.ReviewRequest{}, assessment.ErrInvalid
+		return assessment.ReviewRequest{}, assessment.InvalidReviewArgument("arguments")
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || fields == nil {
-		return assessment.ReviewRequest{}, assessment.ErrInvalid
+		return assessment.ReviewRequest{}, assessment.InvalidReviewArgument("arguments")
 	}
 	for k := range fields {
 		if strings.HasPrefix(k, "_host") {
@@ -54,45 +54,55 @@ func parseReviewContext(raw []byte, context sdk.WorkSession) (assessment.ReviewR
 	q.IncludeDescendants = !explicitSession && context.ID != ""
 	for k, v := range fields {
 		if string(v) == "null" {
-			return q, assessment.ErrInvalid
+			return q, assessment.InvalidReviewArgument(k)
 		}
 		switch k {
 		case "view":
 			if json.Unmarshal(v, &q.View) != nil || (q.View != "compact" && q.View != "full") {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("view")
 			}
 		case "work_session_id":
 			if json.Unmarshal(v, &q.WorkSession) != nil {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("work_session_id")
 			}
 		case "include_descendants":
 			if string(v) != "true" && string(v) != "false" {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("include_descendants")
 			}
 			q.IncludeDescendants = string(v) == "true"
 		case "read_limit":
 			if !reviewInteger(v, &q.ReadLimit) {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("read_limit")
 			}
 		case "record_limit":
 			if !reviewInteger(v, &q.RecordLimit) {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("record_limit")
 			}
 		case "detail_limit":
 			if !reviewInteger(v, &q.DetailLimit) {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("detail_limit")
 			}
 		case "source_incarnation":
 			if json.Unmarshal(v, &q.SourceIncarnation) != nil {
-				return q, assessment.ErrInvalid
+				return q, assessment.InvalidReviewArgument("source_incarnation")
 			}
-		case "result_ref":
+		case "work_field":
+			if json.Unmarshal(v, &q.WorkField) != nil || q.WorkField == "" {
+				return q, assessment.InvalidReviewArgument("work_field")
+			}
+		case "result_ref", "work_ref":
 			var ref map[string]json.RawMessage
-			if json.Unmarshal(v, &ref) != nil || len(ref) != 3 || ref["id"] == nil || ref["sequence"] == nil || ref["sha256"] == nil || json.Unmarshal(v, &q.ResultRef) != nil {
-				return q, assessment.ErrInvalid
+			var parsed assessment.Ref
+			if json.Unmarshal(v, &ref) != nil || len(ref) != 3 || ref["id"] == nil || ref["sequence"] == nil || ref["sha256"] == nil || json.Unmarshal(v, &parsed) != nil {
+				return q, assessment.InvalidReviewArgument(k)
+			}
+			if k == "work_ref" {
+				q.WorkRef = &parsed
+			} else {
+				q.ResultRef = &parsed
 			}
 		default:
-			return q, assessment.ErrInvalid
+			return q, assessment.InvalidReviewArgument("unknown")
 		}
 	}
 	if q.WorkSession == "" && !explicitSession {
@@ -126,9 +136,9 @@ func reviewFailure(err error) error {
 		code = "REVIEW_EVIDENCE_CONFLICT"
 	case errors.Is(err, assessment.ErrProtocol):
 		code = "REVIEW_READER_INVALID"
-	case errors.Is(err, assessment.ErrReviewTooLarge):
+	case errors.Is(err, assessment.ErrReviewTooLarge), errors.Is(err, assessment.ErrWorkFieldTooLarge):
 		code = "REVIEW_RESULT_TOO_LARGE"
-	case errors.Is(err, assessment.ErrResultUnavailable):
+	case errors.Is(err, assessment.ErrResultUnavailable), errors.Is(err, assessment.ErrWorkFieldUnavailable):
 		code = "REVIEW_RESULT_UNAVAILABLE"
 	}
 	return sdk.Fail(code, err.Error())

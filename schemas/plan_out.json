@@ -400,6 +400,102 @@
                   ]
                 },
                 "maxItems": 10
+              },
+              "work_detail_requests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "work_session_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9_.:-]+$",
+                      "description": "Defaults to the host-stamped current work session. Explicit sessions retain single-session scope unless include_descendants is true."
+                    },
+                    "include_descendants": {
+                      "type": "boolean",
+                      "description": "Include only host-proven descendant work sessions. Defaults true for the current implicit session and false for an explicitly selected session."
+                    },
+                    "source_incarnation": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "description": "The original review's source incarnation."
+                    },
+                    "read_limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 128,
+                      "default": 32
+                    },
+                    "record_limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 512,
+                      "default": 128
+                    },
+                    "detail_limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1048576,
+                      "default": 262144
+                    },
+                    "work_ref": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "pattern": "^[0-9]+$"
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "sequence",
+                        "sha256"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Stable work-notice RecordRef from the original review, not the transport ContentRef."
+                    },
+                    "work_field": {
+                      "type": "string",
+                      "enum": [
+                        "state",
+                        "focus",
+                        "next_move",
+                        "plan",
+                        "expected_evidence",
+                        "falsifier",
+                        "decision_needed",
+                        "result",
+                        "evidence",
+                        "evidence_readback"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "work_session_id",
+                    "include_descendants",
+                    "source_incarnation",
+                    "work_ref",
+                    "work_field",
+                    "read_limit",
+                    "record_limit",
+                    "detail_limit"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10,
+                "description": "Pass one request unchanged to review for a whole clipped field. Preserves the original root work scope and collection limits; retained evidence can become unavailable."
               }
             },
             "required": [
@@ -933,6 +1029,102 @@
                 ]
               },
               "maxItems": 10
+            },
+            "work_detail_requests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "work_session_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_.:-]+$",
+                    "description": "Defaults to the host-stamped current work session. Explicit sessions retain single-session scope unless include_descendants is true."
+                  },
+                  "include_descendants": {
+                    "type": "boolean",
+                    "description": "Include only host-proven descendant work sessions. Defaults true for the current implicit session and false for an explicitly selected session."
+                  },
+                  "source_incarnation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "The original review's source incarnation."
+                  },
+                  "read_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 128,
+                    "default": 32
+                  },
+                  "record_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 512,
+                    "default": 128
+                  },
+                  "detail_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1048576,
+                    "default": 262144
+                  },
+                  "work_ref": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "sequence": {
+                        "type": "string",
+                        "pattern": "^[0-9]+$"
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "sequence",
+                      "sha256"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Stable work-notice RecordRef from the original review, not the transport ContentRef."
+                  },
+                  "work_field": {
+                    "type": "string",
+                    "enum": [
+                      "state",
+                      "focus",
+                      "next_move",
+                      "plan",
+                      "expected_evidence",
+                      "falsifier",
+                      "decision_needed",
+                      "result",
+                      "evidence",
+                      "evidence_readback"
+                    ]
+                  }
+                },
+                "required": [
+                  "work_session_id",
+                  "include_descendants",
+                  "source_incarnation",
+                  "work_ref",
+                  "work_field",
+                  "read_limit",
+                  "record_limit",
+                  "detail_limit"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10,
+              "description": "Pass one request unchanged to review for a whole clipped field. Preserves the original root work scope and collection limits; retained evidence can become unavailable."
             }
           },
           "required": [
@@ -1555,6 +1747,102 @@
             ]
           },
           "maxItems": 10
+        },
+        "work_detail_requests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "work_session_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_.:-]+$",
+                "description": "Defaults to the host-stamped current work session. Explicit sessions retain single-session scope unless include_descendants is true."
+              },
+              "include_descendants": {
+                "type": "boolean",
+                "description": "Include only host-proven descendant work sessions. Defaults true for the current implicit session and false for an explicitly selected session."
+              },
+              "source_incarnation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "description": "The original review's source incarnation."
+              },
+              "read_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 128,
+                "default": 32
+              },
+              "record_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 512,
+                "default": 128
+              },
+              "detail_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576,
+                "default": 262144
+              },
+              "work_ref": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sequence": {
+                    "type": "string",
+                    "pattern": "^[0-9]+$"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "sequence",
+                  "sha256"
+                ],
+                "additionalProperties": false,
+                "description": "Stable work-notice RecordRef from the original review, not the transport ContentRef."
+              },
+              "work_field": {
+                "type": "string",
+                "enum": [
+                  "state",
+                  "focus",
+                  "next_move",
+                  "plan",
+                  "expected_evidence",
+                  "falsifier",
+                  "decision_needed",
+                  "result",
+                  "evidence",
+                  "evidence_readback"
+                ]
+              }
+            },
+            "required": [
+              "work_session_id",
+              "include_descendants",
+              "source_incarnation",
+              "work_ref",
+              "work_field",
+              "read_limit",
+              "record_limit",
+              "detail_limit"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10,
+          "description": "Pass one request unchanged to review for a whole clipped field. Preserves the original root work scope and collection limits; retained evidence can become unavailable."
         }
       },
       "required": [

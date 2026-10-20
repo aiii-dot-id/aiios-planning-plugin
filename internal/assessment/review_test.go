@@ -26,6 +26,67 @@ func TestReviewNeedsNoPlanRegistrationOrCapture(t *testing.T) {
 	}
 }
 
+func TestReviewValidationDiagnosticsKeepTheOriginalBoundaries(t *testing.T) {
+	validRef := Ref{ID: "record", Sequence: 1, SHA256: strings.Repeat("a", 64)}
+	for _, tc := range []struct {
+		name, want string
+		change     func(*ReviewRequest)
+	}{
+		{"view", "view must be", func(q *ReviewRequest) { q.View = "PRIVATE_ARGUMENT_CONTENT" }},
+		{"session", "work_session_id must name", func(q *ReviewRequest) { q.WorkSession = "../PRIVATE_ARGUMENT_CONTENT/" }},
+		{"read limit", "read_limit must be an integer from 1 to 128", func(q *ReviewRequest) { q.ReadLimit = 129 }},
+		{"record limit", "record_limit must be an integer from 1 to 512", func(q *ReviewRequest) { q.RecordLimit = 513 }},
+		{"detail limit", "detail_limit must be an integer from 1 to 1048576", func(q *ReviewRequest) { q.DetailLimit = 1<<20 + 1 }},
+		{"source length", "source_incarnation must be", func(q *ReviewRequest) { q.SourceIncarnation = strings.Repeat("a", 257) }},
+		{"missing source", "source_incarnation must be", func(q *ReviewRequest) { q.ResultRef = &validRef }},
+		{"source without reference", "source_incarnation must be", func(q *ReviewRequest) { q.SourceIncarnation = "PRIVATE_ARGUMENT_CONTENT" }},
+		{"reference conflict", "mutually exclusive", func(q *ReviewRequest) {
+			q.SourceIncarnation = "source"
+			q.ResultRef, q.WorkRef, q.WorkField = &validRef, &validRef, "state"
+		}},
+		{"missing work field", "must be supplied together", func(q *ReviewRequest) { q.SourceIncarnation = "source"; q.WorkRef = &validRef }},
+		{"missing work reference", "must be supplied together", func(q *ReviewRequest) { q.WorkField = "state" }},
+		{"unknown work field", "work_field must be", func(q *ReviewRequest) {
+			q.SourceIncarnation = "source"
+			q.WorkRef, q.WorkField = &validRef, "PRIVATE_ARGUMENT_CONTENT"
+		}},
+		{"reference ID", "non-empty string of at most 256 bytes", func(q *ReviewRequest) {
+			q.SourceIncarnation = "source"
+			q.ResultRef = &Ref{Sequence: 1, SHA256: validRef.SHA256}
+		}},
+		{"reference sequence", "positive decimal string", func(q *ReviewRequest) {
+			q.SourceIncarnation = "source"
+			q.ResultRef = &Ref{ID: "PRIVATE_ARGUMENT_CONTENT", SHA256: validRef.SHA256}
+		}},
+		{"reference hash", "64 lowercase hexadecimal", func(q *ReviewRequest) {
+			q.SourceIncarnation = "source"
+			q.WorkRef, q.WorkField = &Ref{ID: "record", Sequence: 1, SHA256: strings.Repeat("A", 64)}, "state"
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := DefaultReviewRequest("ws")
+			tc.change(&q)
+			f := newFixture(sample("passed"), 0)
+			_, err := Review(f, q)
+			if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), `Example with an acting work session: {"view":"compact"}`) || strings.Contains(err.Error(), "PRIVATE_ARGUMENT_CONTENT") {
+				t.Fatalf("validation lost the fixed requirement, example or original classification: %v", err)
+			}
+			if f.queries != 0 {
+				t.Fatal("an invalid review read the recorded source", f.queries)
+			}
+		})
+	}
+	for _, q := range []ReviewRequest{
+		{WorkSession: "ws", ReadLimit: 1, RecordLimit: 1, DetailLimit: 1},
+		{WorkSession: strings.Repeat("a", 128), ReadLimit: 128, RecordLimit: 512, DetailLimit: 1 << 20},
+		{WorkSession: "ws", View: "full", ReadLimit: 1, RecordLimit: 1, DetailLimit: 1, ResultRef: &validRef, SourceIncarnation: strings.Repeat("a", 256)},
+	} {
+		if err := q.Validate(); err != nil {
+			t.Fatal("diagnostics changed a valid boundary", q, err)
+		}
+	}
+}
+
 func TestReviewUnknownIsNotZero(t *testing.T) {
 	f := newFixture(sample("passed"), 0)
 	got, err := Review(f, DefaultReviewRequest("absent"))

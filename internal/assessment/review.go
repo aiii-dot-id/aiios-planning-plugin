@@ -3,6 +3,7 @@ package assessment
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -15,11 +16,32 @@ const MaxResultDetailRunes = 8192
 
 var ErrReviewTooLarge = errors.New(`assessment: review exceeds response budget; call review with a lower record_limit (for example, {"record_limit":8})`)
 var ErrResultUnavailable = errors.New("assessment: result not available in the selected work and read limits; use the original work_session_id and source_incarnation, or increase bounded record_limit/read_limit/detail_limit and review again")
+var ErrWorkFieldUnavailable = errors.New("assessment: work field not available in the selected retained notice and read limits; use its original work session, scope, source incarnation and reference")
+var ErrWorkFieldTooLarge = errors.New("assessment: the whole retained work field exceeds the 60 KiB encoded response budget; it was not clipped, and lowering record_limit cannot shrink this field")
 
 type ResultSelection struct {
 	WorkSession       string `json:"work_session_id"`
 	SourceIncarnation string `json:"source_incarnation"`
 	ResultRef         Ref    `json:"result_ref"`
+}
+
+type WorkSelection struct {
+	WorkSession        string `json:"work_session_id"`
+	IncludeDescendants bool   `json:"include_descendants"`
+	SourceIncarnation  string `json:"source_incarnation"`
+	WorkRef            Ref    `json:"work_ref"`
+	WorkField          string `json:"work_field"`
+	ReadLimit          int    `json:"read_limit"`
+	RecordLimit        int    `json:"record_limit"`
+	DetailLimit        int    `json:"detail_limit"`
+}
+
+type WorkDetail struct {
+	Ref               Ref    `json:"ref"`
+	SourceIncarnation string `json:"source_incarnation"`
+	WorkSession       string `json:"work_session_id"`
+	Field             string `json:"field"`
+	Value             string `json:"value"`
 }
 
 type ResultDetail struct {
@@ -44,6 +66,8 @@ type ReviewRequest struct {
 	RecordLimit        int    `json:"record_limit"`
 	DetailLimit        int    `json:"detail_limit"`
 	ResultRef          *Ref   `json:"result_ref,omitempty"`
+	WorkRef            *Ref   `json:"work_ref,omitempty"`
+	WorkField          string `json:"work_field,omitempty"`
 	SourceIncarnation  string `json:"source_incarnation,omitempty"`
 }
 
@@ -51,22 +75,79 @@ func DefaultReviewRequest(session string) ReviewRequest {
 	return ReviewRequest{View: "compact", WorkSession: session, ReadLimit: 32, RecordLimit: 128, DetailLimit: 256 << 10}
 }
 
+func InvalidReviewArgument(field string) error {
+	var requirement string
+	switch field {
+	case "arguments":
+		requirement = "arguments must be a JSON object with unique keys"
+	case "view":
+		requirement = `view must be "compact" or "full"`
+	case "work_session_id":
+		requirement = "work_session_id must name an existing session using 1..128 ASCII letters, digits, underscores, hyphens, periods or colons; omit it only when the host supplies current work"
+	case "include_descendants":
+		requirement = "include_descendants must be a JSON boolean, true or false"
+	case "read_limit":
+		requirement = "read_limit must be an integer from 1 to 128"
+	case "record_limit":
+		requirement = "record_limit must be an integer from 1 to 512"
+	case "detail_limit":
+		requirement = "detail_limit must be an integer from 1 to 1048576 bytes"
+	case "source_incarnation":
+		requirement = "source_incarnation must be a string of at most 256 bytes, non-empty exactly when result_ref or work_ref is supplied; copy the original detail request unchanged"
+	case "result_ref", "work_ref":
+		requirement = "result_ref and work_ref must each contain only id (a non-empty string of at most 256 bytes), sequence (a positive decimal string) and sha256 (64 lowercase hexadecimal characters); copy the original result_detail_request or work_detail_requests entry unchanged"
+	case "reference_selection":
+		requirement = "result_ref and work_ref are mutually exclusive; copy just one original detail request unchanged"
+	case "work_field_pair":
+		requirement = "work_ref and work_field must be supplied together; copy one original work_detail_requests entry unchanged"
+	case "work_field":
+		requirement = "work_field must be state, focus, next_move, plan, expected_evidence, falsifier, decision_needed, result, evidence or evidence_readback"
+	default:
+		requirement = "unsupported review argument; use only the documented work_session_id, view, include_descendants, read_limit, record_limit, detail_limit, source_incarnation, result_ref, work_ref and work_field fields"
+	}
+	return fmt.Errorf("%w: %s. Example with an acting work session: {\"view\":\"compact\"}; otherwise supply an existing work_session_id", ErrInvalid, requirement)
+}
+
 func (q ReviewRequest) Validate() error {
 	if q.View != "" && q.View != "compact" && q.View != "full" {
-		return ErrInvalid
+		return InvalidReviewArgument("view")
 	}
-	if (q.ResultRef == nil) != (q.SourceIncarnation == "") || len(q.SourceIncarnation) > 256 {
-		return ErrInvalid
+	if q.ResultRef != nil && q.WorkRef != nil {
+		return InvalidReviewArgument("reference_selection")
 	}
-	if r := q.ResultRef; r != nil && (r.ID == "" || len(r.ID) > 256 || r.Sequence == 0 || !validHash(r.SHA256)) {
-		return ErrInvalid
+	if (q.WorkRef == nil) != (q.WorkField == "") {
+		return InvalidReviewArgument("work_field_pair")
 	}
-	if len(q.WorkSession) == 0 || len(q.WorkSession) > 128 || q.ReadLimit < 1 || q.ReadLimit > 128 || q.RecordLimit < 1 || q.RecordLimit > 512 || q.DetailLimit < 1 || q.DetailLimit > 1<<20 {
-		return ErrInvalid
+	selected := q.ResultRef != nil || q.WorkRef != nil
+	if selected != (q.SourceIncarnation != "") || len(q.SourceIncarnation) > 256 {
+		return InvalidReviewArgument("source_incarnation")
+	}
+	for i, r := range []*Ref{q.ResultRef, q.WorkRef} {
+		if r != nil && (r.ID == "" || len(r.ID) > 256 || r.Sequence == 0 || !validHash(r.SHA256)) {
+			return InvalidReviewArgument([]string{"result_ref", "work_ref"}[i])
+		}
+	}
+	if q.WorkRef != nil {
+		var work sdk.InteractionWorkChange
+		if workField(&work, q.WorkField) == nil {
+			return InvalidReviewArgument("work_field")
+		}
+	}
+	if len(q.WorkSession) == 0 || len(q.WorkSession) > 128 {
+		return InvalidReviewArgument("work_session_id")
+	}
+	if q.ReadLimit < 1 || q.ReadLimit > 128 {
+		return InvalidReviewArgument("read_limit")
+	}
+	if q.RecordLimit < 1 || q.RecordLimit > 512 {
+		return InvalidReviewArgument("record_limit")
+	}
+	if q.DetailLimit < 1 || q.DetailLimit > 1<<20 {
+		return InvalidReviewArgument("detail_limit")
 	}
 	for _, r := range q.WorkSession {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.' || r == ':') {
-			return ErrInvalid
+			return InvalidReviewArgument("work_session_id")
 		}
 	}
 	return nil
@@ -84,11 +165,12 @@ type Counts struct {
 }
 
 type WorkFact struct {
-	Ref             Ref                       `json:"ref"`
-	ProjectID       string                    `json:"project_id"`
-	TurnID          string                    `json:"turn_id"`
-	Change          sdk.InteractionWorkChange `json:"change"`
-	TruncatedFields []string                  `json:"truncated_fields"`
+	Ref                Ref                       `json:"ref"`
+	ProjectID          string                    `json:"project_id"`
+	TurnID             string                    `json:"turn_id"`
+	Change             sdk.InteractionWorkChange `json:"change"`
+	TruncatedFields    []string                  `json:"truncated_fields"`
+	WorkDetailRequests []WorkSelection           `json:"work_detail_requests,omitempty"`
 }
 
 type ReviewResult struct {
@@ -107,9 +189,20 @@ type ReviewResult struct {
 	UnmatchedResults  []Ref                   `json:"unmatched_results"`
 	WorkChanges       []WorkFact              `json:"work_changes"`
 	ResultDetail      *ResultDetail           `json:"result_detail,omitempty"`
+	WorkDetail        *WorkDetail             `json:"work_detail,omitempty"`
 }
 
 func (r ReviewResult) MarshalJSON() ([]byte, error) {
+	if r.WorkDetail != nil {
+		return json.Marshal(struct {
+			Identity          string      `json:"identity"`
+			WorkSession       string      `json:"work_session_id"`
+			SourceIncarnation string      `json:"source_incarnation"`
+			Scope             string      `json:"scope"`
+			Coverage          Coverage    `json:"coverage"`
+			WorkDetail        *WorkDetail `json:"work_detail"`
+		}{r.Identity, r.WorkSession, r.SourceIncarnation, r.Scope, r.Coverage, r.WorkDetail})
+	}
 	if r.ResultDetail != nil {
 		return json.Marshal(struct {
 			Identity          string        `json:"identity"`
@@ -143,7 +236,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 	if err := c.collect(); err != nil {
 		return ReviewResult{}, err
 	}
-	if q.ResultRef != nil && q.SourceIncarnation != c.out.SourceIncarnation {
+	if (q.ResultRef != nil || q.WorkRef != nil) && q.SourceIncarnation != c.out.SourceIncarnation {
 		return ReviewResult{}, ErrSourceChanged
 	}
 	out := ReviewResult{Request: q, Identity: c.q.Identity, WorkSession: q.WorkSession, SourceIncarnation: c.out.SourceIncarnation, Scope: "retained_session_without_descendants", CountBasis: "retained_recorded_requests", Attempts: c.out.Attempts, UnmatchedResults: []Ref{}, WorkChanges: []WorkFact{}}
@@ -179,17 +272,16 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 			return ReviewResult{}, protocol("work change belongs to another session")
 		}
 		fact := WorkFact{Ref: RecordRef(r), ProjectID: r.ProjectID, TurnID: r.TurnID, Change: w, TruncatedFields: []string{}}
-		for name, field := range map[string]**string{
-			"state": &fact.Change.State, "focus": &fact.Change.Focus, "next_move": &fact.Change.NextMove, "plan": &fact.Change.Plan, "expected_evidence": &fact.Change.ExpectedEvidence, "falsifier": &fact.Change.Falsifier, "decision_needed": &fact.Change.DecisionNeeded, "result": &fact.Change.Result, "evidence": &fact.Change.Evidence, "evidence_readback": &fact.Change.EvidenceReadback,
-		} {
-			if *field == nil {
+		for _, field := range workFields(&fact.Change) {
+			if *field.value == nil {
 				continue
 			}
-			runes := []rune(**field)
+			runes := []rune(**field.value)
 			if len(runes) > 256 {
 				text := string(runes[:256])
-				*field = &text
-				fact.TruncatedFields = append(fact.TruncatedFields, name)
+				*field.value = &text
+				fact.TruncatedFields = append(fact.TruncatedFields, field.name)
+				fact.WorkDetailRequests = append(fact.WorkDetailRequests, WorkSelection{WorkSession: q.WorkSession, IncludeDescendants: q.IncludeDescendants, SourceIncarnation: out.SourceIncarnation, WorkRef: fact.Ref, WorkField: field.name, ReadLimit: q.ReadLimit, RecordLimit: q.RecordLimit, DetailLimit: q.DetailLimit})
 			}
 		}
 		sort.Strings(fact.TruncatedFields)
@@ -218,6 +310,24 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 		}
 	}
 	out.Coverage = c.out.Coverage
+	if q.WorkRef != nil {
+		r, ok := c.seen[q.WorkRef.ID]
+		if !ok || !c.selected[r.ID] || r.Kind != sdk.InteractionNotice || r.Details.Work == nil {
+			return ReviewResult{}, ErrWorkFieldUnavailable
+		}
+		if RecordRef(r) != *q.WorkRef {
+			return ReviewResult{}, ErrConflict
+		}
+		if r.Details.WorkSession == "" || r.Details.Work.Session != r.Details.WorkSession || !q.IncludeDescendants && r.Details.WorkSession != q.WorkSession {
+			return ReviewResult{}, protocol("work notice belongs to another session")
+		}
+		field := workField(r.Details.Work, q.WorkField)
+		if field == nil || *field == nil {
+			return ReviewResult{}, ErrWorkFieldUnavailable
+		}
+		out.WorkDetail = &WorkDetail{Ref: *q.WorkRef, SourceIncarnation: out.SourceIncarnation, WorkSession: r.Details.WorkSession, Field: q.WorkField, Value: **field}
+		out.Scope = "retained_work_field_detail"
+	}
 	if q.ResultRef != nil {
 
 		for _, a := range out.Attempts {
@@ -250,6 +360,9 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 		return ReviewResult{}, err
 	}
 	if len(raw) > MaxReviewBytes {
+		if out.WorkDetail != nil {
+			return ReviewResult{}, ErrWorkFieldTooLarge
+		}
 		return ReviewResult{}, ErrReviewTooLarge
 	}
 	return out, nil

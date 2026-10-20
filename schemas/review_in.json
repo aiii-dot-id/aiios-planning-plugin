@@ -34,7 +34,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
-      "description": "Required with result_ref; copy the source_incarnation from the original review."
+      "description": "Required with result_ref or work_ref; copy from the original review."
     },
     "result_ref": {
       "type": "object",
@@ -68,7 +68,48 @@
         "full"
       ],
       "default": "compact",
-      "description": "Compact current work and non-success diagnostics by default. full returns the prior complete bounded review shape. Ignored for exact result detail."
+      "description": "Compact current work and non-success diagnostics by default. full returns the prior complete bounded review shape. Ignored for exact result or work-field detail."
+    },
+    "work_ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sequence": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "sequence",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "description": "Stable work-notice RecordRef from the original review, not the transport ContentRef."
+    },
+    "work_field": {
+      "type": "string",
+      "enum": [
+        "state",
+        "focus",
+        "next_move",
+        "plan",
+        "expected_evidence",
+        "falsifier",
+        "decision_needed",
+        "result",
+        "evidence",
+        "evidence_readback"
+      ],
+      "description": "Required with work_ref and source_incarnation; mutually exclusive with result_ref. Returns this whole authored field, or an explicit refusal, never a clipped value."
     }
   },
   "additionalProperties": false,

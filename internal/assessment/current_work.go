@@ -2,42 +2,61 @@ package assessment
 
 import sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 
+type workTextField struct {
+	name  string
+	value **string
+}
+
+func workFields(w *sdk.InteractionWorkChange) []workTextField {
+	return []workTextField{
+		{"state", &w.State}, {"focus", &w.Focus}, {"next_move", &w.NextMove}, {"plan", &w.Plan},
+		{"expected_evidence", &w.ExpectedEvidence}, {"falsifier", &w.Falsifier}, {"decision_needed", &w.DecisionNeeded},
+		{"result", &w.Result}, {"evidence", &w.Evidence}, {"evidence_readback", &w.EvidenceReadback},
+	}
+}
+
+func workField(w *sdk.InteractionWorkChange, name string) **string {
+	for _, field := range workFields(w) {
+		if field.name == name {
+			return field.value
+		}
+	}
+	return nil
+}
+
 type WorkMaterial struct {
-	Session         string                    `json:"work_session_id"`
-	Availability    string                    `json:"availability"`
-	Fields          sdk.InteractionWorkChange `json:"fields"`
-	FieldRefs       map[string]Ref            `json:"field_refs"`
-	TruncatedFields []string                  `json:"truncated_fields"`
+	Session            string                    `json:"work_session_id"`
+	Availability       string                    `json:"availability"`
+	Fields             sdk.InteractionWorkChange `json:"fields"`
+	FieldRefs          map[string]Ref            `json:"field_refs"`
+	TruncatedFields    []string                  `json:"truncated_fields"`
+	WorkDetailRequests []WorkSelection           `json:"work_detail_requests,omitempty"`
 }
 
 func CurrentWork(review ReviewResult) WorkMaterial {
 	out := WorkMaterial{Session: review.WorkSession, Availability: "not_retained", Fields: sdk.InteractionWorkChange{Session: review.WorkSession}, FieldRefs: map[string]Ref{}, TruncatedFields: []string{}}
 	truncated := map[string]bool{}
+	routes := map[string]WorkSelection{}
 	for _, fact := range review.WorkChanges {
 		if fact.Change.Session != review.WorkSession {
 			continue
 		}
 		out.Availability = "retained"
-		fields := []struct {
-			name string
-			src  *string
-			dst  **string
-		}{
-			{"state", fact.Change.State, &out.Fields.State}, {"focus", fact.Change.Focus, &out.Fields.Focus},
-			{"next_move", fact.Change.NextMove, &out.Fields.NextMove}, {"plan", fact.Change.Plan, &out.Fields.Plan},
-			{"expected_evidence", fact.Change.ExpectedEvidence, &out.Fields.ExpectedEvidence}, {"falsifier", fact.Change.Falsifier, &out.Fields.Falsifier},
-			{"decision_needed", fact.Change.DecisionNeeded, &out.Fields.DecisionNeeded}, {"result", fact.Change.Result, &out.Fields.Result},
-			{"evidence", fact.Change.Evidence, &out.Fields.Evidence}, {"evidence_readback", fact.Change.EvidenceReadback, &out.Fields.EvidenceReadback},
-		}
-		for _, f := range fields {
-			if f.src != nil {
-				v := *f.src
-				*f.dst = &v
+		for _, f := range workFields(&fact.Change) {
+			if *f.value != nil {
+				v := **f.value
+				*workField(&out.Fields, f.name) = &v
 				out.FieldRefs[f.name] = fact.Ref
 				truncated[f.name] = false
+				delete(routes, f.name)
 				for _, name := range fact.TruncatedFields {
 					if name == f.name {
 						truncated[name] = true
+					}
+				}
+				for _, route := range fact.WorkDetailRequests {
+					if route.WorkField == f.name {
+						routes[f.name] = route
 					}
 				}
 			}
@@ -53,9 +72,12 @@ func CurrentWork(review ReviewResult) WorkMaterial {
 			out.FieldRefs["independent"] = fact.Ref
 		}
 	}
-	for _, name := range []string{"state", "focus", "next_move", "plan", "expected_evidence", "falsifier", "decision_needed", "result", "evidence", "evidence_readback"} {
-		if truncated[name] {
-			out.TruncatedFields = append(out.TruncatedFields, name)
+	for _, field := range workFields(&out.Fields) {
+		if truncated[field.name] {
+			out.TruncatedFields = append(out.TruncatedFields, field.name)
+			if route, ok := routes[field.name]; ok {
+				out.WorkDetailRequests = append(out.WorkDetailRequests, route)
+			}
 		}
 	}
 	return out

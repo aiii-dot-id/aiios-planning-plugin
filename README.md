@@ -63,6 +63,18 @@ exact record. `content_truncated`, `execution_truncated` and `omissions` disclos
 limits. A mismatched source/ref refuses; missing evidence is unavailable. The
 whole response remains bounded to 60 KiB.
 
+Work text is limited to 256 runes in both aggregate views. For a clipped field,
+pass an entry from `work_detail_requests` unchanged to `review`; current-work
+material retains only the latest field's route. Each request carries `work_ref`,
+`work_field`, source incarnation, original root/descendant scope and read limits.
+The detail-only response (`scope: retained_work_field_detail`, `work_detail`)
+returns the whole retained authored value, including an explicit empty-string
+clear, or an unavailable/too-large refusal. It never substitutes a newer value
+or clips the field. A field that alone exceeds 60 KiB cannot be recovered by
+lowering `record_limit`. This is retained history, not a current-state guarantee
+or verified evidence. `work_ref` and `result_ref` are mutually exclusive;
+transport `ContentRef` hashes are not stable work-record references.
+
 The host's exact record ID for this review is excluded from its own report.
 If unavailable, the result says so instead of guessing by tool name. Unresolved
 historical child ancestry makes descendant coverage incomplete; only proven

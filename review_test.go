@@ -36,6 +36,118 @@ func TestReviewInputAndSchemas(t *testing.T) {
 	}
 }
 
+func TestReviewArgumentFailuresNameTheRequirementWithoutEchoingInput(t *testing.T) {
+	const private = "PRIVATE_ARGUMENT_CONTENT"
+	ref := `{"id":"record","sequence":"1","sha256":"` + strings.Repeat("a", 64) + `"}`
+	host := sdk.WorkSession{ID: "ws-current", CallID: "own-call"}
+	for _, tc := range []struct{ name, raw, want string }{
+		{"null object", `null`, "arguments must be a JSON object"},
+		{"array", `[]`, "arguments must be a JSON object"},
+		{"duplicate key", `{"view":"compact","view":"full"}`, "unique keys"},
+		{"view", `{"view":"` + private + `"}`, `view must be "compact" or "full"`},
+		{"session type", `{"work_session_id":17}`, "work_session_id must name an existing session"},
+		{"empty session", `{"work_session_id":""}`, "work_session_id must name an existing session"},
+		{"session characters", `{"work_session_id":"../` + private + `/"}`, "1..128 ASCII"},
+		{"boolean type", `{"include_descendants":"true"}`, "include_descendants must be a JSON boolean"},
+		{"null field", `{"read_limit":null}`, "read_limit must be an integer from 1 to 128"},
+		{"integer type", `{"read_limit":"` + private + `"}`, "read_limit must be an integer from 1 to 128"},
+		{"integer fraction", `{"read_limit":1.5}`, "read_limit must be an integer from 1 to 128"},
+		{"read bound", `{"read_limit":129}`, "read_limit must be an integer from 1 to 128"},
+		{"record bound", `{"record_limit":513}`, "record_limit must be an integer from 1 to 512"},
+		{"detail bound", `{"detail_limit":1048577}`, "detail_limit must be an integer from 1 to 1048576 bytes"},
+		{"unpaired source", `{"source_incarnation":"` + private + `"}`, "source_incarnation must be a string"},
+		{"result shape", `{"result_ref":{"id":"` + private + `"}}`, "result_ref and work_ref must each contain only"},
+		{"reference sequence", `{"source_incarnation":"source","result_ref":{"id":"` + private + `","sequence":"0","sha256":"` + strings.Repeat("a", 64) + `"}}`, "positive decimal string"},
+		{"reference hash", `{"source_incarnation":"source","result_ref":{"id":"` + private + `","sequence":"1","sha256":"` + strings.Repeat("A", 64) + `"}}`, "64 lowercase hexadecimal"},
+		{"reference conflict", `{"source_incarnation":"source","result_ref":` + ref + `,"work_ref":` + ref + `,"work_field":"state"}`, "result_ref and work_ref are mutually exclusive"},
+		{"field without reference", `{"work_field":"state"}`, "work_ref and work_field must be supplied together"},
+		{"reference without field", `{"source_incarnation":"source","work_ref":` + ref + `}`, "work_ref and work_field must be supplied together"},
+		{"unknown work field", `{"source_incarnation":"source","work_ref":` + ref + `,"work_field":"` + private + `"}`, "work_field must be state, focus"},
+		{"unknown argument", `{"` + private + `":"` + private + `"}`, "unsupported review argument"},
+		{"unknown null argument", `{"` + private + `":null}`, "unsupported review argument"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseReviewContext([]byte(tc.raw), host)
+			if !errors.Is(err, assessment.ErrInvalid) || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), `Example with an acting work session: {"view":"compact"}`) {
+				t.Fatalf("invalid review lost its classification, requirement or usable example: %v", err)
+			}
+			if strings.Contains(err.Error(), private) {
+				t.Fatalf("review refusal echoed a supplied argument: %v", err)
+			}
+			var failure *sdk.OperationError
+			if !errors.As(reviewFailure(err), &failure) || failure.ReasonCode != "OPERATION_ARGUMENT_INVALID" {
+				t.Fatalf("invalid review changed its plugin error classification: %v", reviewFailure(err))
+			}
+		})
+	}
+}
+
+func TestReviewDiagnosticsPreserveValidInputsAndScope(t *testing.T) {
+	host := sdk.WorkSession{ID: "ws-current", CallID: "own-call"}
+	for _, raw := range []string{`{}`, `{"view":"compact"}`, `{"view":"full","include_descendants":false}`, `{"read_limit":32.0,"record_limit":1e2,"detail_limit":1048576,"_host_now_ms":123}`, `{"source_incarnation":""}`} {
+		q, err := parseReviewContext([]byte(raw), host)
+		if err != nil || q.WorkSession != host.ID || q.ExcludeCallID != host.CallID {
+			t.Fatalf("previously valid aggregate input or host scope changed: %s, %+v, %v", raw, q, err)
+		}
+	}
+	q, err := parseReviewContext([]byte(`{"work_session_id":"ws-other","read_limit":128,"record_limit":512,"detail_limit":1}`), host)
+	if err != nil || q.WorkSession != "ws-other" || q.IncludeDescendants || q.ReadLimit != 128 || q.RecordLimit != 512 || q.DetailLimit != 1 {
+		t.Fatal("explicit-session scope or valid boundary changed", q, err)
+	}
+	ref := `{"id":"record","sequence":"1","sha256":"` + strings.Repeat("a", 64) + `"}`
+	for _, field := range []string{"state", "focus", "next_move", "plan", "expected_evidence", "falsifier", "decision_needed", "result", "evidence", "evidence_readback"} {
+		q, err := parseReviewContext([]byte(`{"source_incarnation":"source","work_ref":`+ref+`,"work_field":"`+field+`"}`), host)
+		if err != nil || q.WorkRef == nil || q.WorkRef.ID != "record" || q.WorkRef.Sequence != 1 || q.WorkField != field || q.SourceIncarnation != "source" || !q.IncludeDescendants {
+			t.Fatalf("valid exact work-detail route changed: %s, %+v, %v", field, q, err)
+		}
+	}
+	q, err = parseReviewContext([]byte(`{"source_incarnation":"source","result_ref":`+ref+`}`), host)
+	if err != nil || q.ResultRef == nil || q.ResultRef.ID != "record" || q.ResultRef.Sequence != 1 || q.WorkRef != nil {
+		t.Fatal("valid exact result-detail route changed", q, err)
+	}
+}
+
+func TestNativeReviewArgumentFailuresAreActionableBeforeHostReads(t *testing.T) {
+	k := newFakeKV()
+	reads := 0
+	k.readOnlyCall = func(string, json.RawMessage, json.RawMessage) ([]byte, bool) {
+		reads++
+		return denyBody("invalid review must not reach host data"), true
+	}
+	h := startHarness(t, k)
+	h.workSession = map[string]any{"id": "ws-current", "call_id": "own-call"}
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{"view", map[string]any{"view": "PRIVATE_ARGUMENT_CONTENT"}, `view must be "compact" or "full"`},
+		{"read bound", map[string]any{"read_limit": 129}, "read_limit must be an integer from 1 to 128"},
+		{"reference pair", map[string]any{"work_field": "state"}, "work_ref and work_field must be supplied together"},
+		{"reference shape", map[string]any{"result_ref": map[string]any{"id": "PRIVATE_ARGUMENT_CONTENT"}}, "positive decimal string"},
+		{"unknown argument", map[string]any{"PRIVATE_ARGUMENT_CONTENT": "PRIVATE_ARGUMENT_CONTENT"}, "unsupported review argument"},
+		{"unknown null argument", map[string]any{"PRIVATE_ARGUMENT_CONTENT": nil}, "unsupported review argument"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := h.call("review", tc.args)
+			var failure struct {
+				Status     string `json:"status"`
+				ReasonCode string `json:"reasonCode"`
+				Reason     string `json:"reason"`
+			}
+			if err := json.Unmarshal(response["result"], &failure); err != nil {
+				t.Fatal(err)
+			}
+			if failure.Status != "failed" || failure.ReasonCode != "OPERATION_ARGUMENT_INVALID" || !strings.Contains(failure.Reason, tc.want) || !strings.Contains(failure.Reason, `Example with an acting work session: {"view":"compact"}`) || strings.Contains(failure.Reason, "PRIVATE_ARGUMENT_CONTENT") {
+				t.Fatalf("registered plugin lost its safe actionable refusal: %+v", failure)
+			}
+		})
+	}
+	if reads != 0 || k.puts != 0 {
+		t.Fatalf("argument failures read host data or wrote state: reads=%d puts=%d", reads, k.puts)
+	}
+}
+
 func TestNativeReviewIsReadOnlyAndPreservesDenial(t *testing.T) {
 	plan, outcome := "inspect and run the check", "served: resident reports completion"
 	rows := []sdk.InteractionRecord{

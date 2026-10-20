@@ -41,6 +41,8 @@ func (r ReviewResult) Compact() CompactReview {
 	q := r.Request
 	q.View = "full"
 	q.ResultRef = nil
+	q.WorkRef = nil
+	q.WorkField = ""
 	q.SourceIncarnation = ""
 	if q.WorkSession == "" {
 		q = DefaultReviewRequest(r.WorkSession)
@@ -104,7 +106,7 @@ func (r ReviewResult) Compact() CompactReview {
 }
 
 func (r ReviewResult) Material() map[string]any {
-	if r.Request.View == "compact" && r.ResultDetail == nil {
+	if r.Request.View == "compact" && r.ResultDetail == nil && r.WorkDetail == nil {
 		compact := r.Compact()
 		work := compact.CurrentWork
 		compact.CurrentWork = nil
