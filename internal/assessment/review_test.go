@@ -15,7 +15,7 @@ func TestReviewNeedsNoPlanRegistrationOrCapture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Identity != "identity" || !got.Coverage.Complete || got.Counts == nil || got.Counts.Admissions != 1 || got.Counts.Succeeded != 1 || len(got.WorkChanges) != 4 {
+	if got.Identity != "identity" || !got.Coverage.Complete || got.Counts == nil || got.Counts.RecordedRequests != 1 || got.Counts.Succeeded != 1 || len(got.WorkChanges) != 4 {
 		t.Fatalf("%+v", got)
 	}
 	if got.Coverage.ReadCalls != 2 || f.fileReads != 0 {
@@ -96,13 +96,13 @@ func TestReviewUnknownIsNotZero(t *testing.T) {
 	f = newFixture(sample("passed"), 0)
 	f.rows = f.rows[:5]
 	got, err = Review(f, DefaultReviewRequest("ws"))
-	if err != nil || got.Counts == nil || got.Counts.Unknown != 1 || got.Counts.Admissions != 1 || got.Coverage.Complete {
+	if err != nil || got.Counts == nil || got.Counts.Unknown != 1 || got.Counts.RecordedRequests != 1 || got.Coverage.Complete {
 		t.Fatalf("%+v %v", got, err)
 	}
 	f = newFixture(sample("passed"), 0)
 	f.rows = append(f.rows[:2], f.rows[3:5]...)
 	got, err = Review(f, DefaultReviewRequest("ws"))
-	if err != nil || got.Counts == nil || got.Counts.Admissions != 0 || !got.Coverage.Complete {
+	if err != nil || got.Counts == nil || got.Counts.RecordedRequests != 0 || !got.Coverage.Complete {
 		t.Fatalf("known zero: %+v %v", got, err)
 	}
 }
@@ -130,7 +130,7 @@ func TestReviewBoundedExcerptsAndCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := got.WorkChanges[1]
-	if len([]rune(*w.Change.Plan)) != 256 || len(w.TruncatedFields) != 1 || w.TruncatedFields[0] != "plan" || w.Ref != RecordRef(f.rows[1]) {
+	if len([]rune(*w.Change.Plan)) != 256 || len(w.TruncatedFields) != 1 || w.TruncatedFields[0] != "plan" || w.Ref != reviewRef(f.rows[1]) {
 		t.Fatal(w)
 	}
 	if len([]rune(*f.rows[1].Details.Work.Plan)) != 300 {
@@ -259,7 +259,7 @@ func TestCurrentWorkUsesExistingFieldHistoryAndClears(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := CurrentWork(review)
-	if got.Availability != "retained" || *got.Fields.Focus != "" || *got.Fields.ExpectedEvidence != "actual check output" || len([]rune(*got.Fields.Plan)) != 256 || got.FieldRefs["focus"] != RecordRef(f.rows[4]) || len(got.TruncatedFields) != 1 {
+	if got.Availability != "retained" || *got.Fields.Focus != "" || *got.Fields.ExpectedEvidence != "actual check output" || len([]rune(*got.Fields.Plan)) != 256 || got.FieldRefs["focus"] != reviewRef(f.rows[4]) || len(got.TruncatedFields) != 1 {
 		t.Fatalf("%+v", got)
 	}
 	missing := CurrentWork(ReviewResult{WorkSession: "missing", WorkChanges: review.WorkChanges})

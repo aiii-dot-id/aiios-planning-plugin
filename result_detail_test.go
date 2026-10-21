@@ -19,7 +19,14 @@ func TestReviewExactSelectorParsing(t *testing.T) {
 	if err != nil || q.WorkSession != "ws" || q.IncludeDescendants || q.ResultRef == nil || q.ResultRef.Sequence != 3 || q.SourceIncarnation != "inc" {
 		t.Fatal(q, err)
 	}
+
+	stamped := strings.Replace(raw, `"id":"r"`, `"id":"r","incarnation":"inc"`, 1)
+	if q, err = parseReview([]byte(stamped)); err != nil || q.ResultRef.Incarnation != "inc" {
+		t.Fatal(q, err)
+	}
 	for _, bad := range []string{
+		strings.Replace(raw, `"id":"r"`, `"id":"r","incarnation":"other"`, 1),
+		strings.Replace(stamped, `"id":"r"`, `"id":"r","other":1`, 1),
 		strings.Replace(raw, `"sequence":"3"`, `"sequence":3`, 1),
 		strings.Replace(raw, `"sequence":"3"`, `"sequence":"0"`, 1),
 		strings.Replace(raw, `"id":"r"`, `"id":"r","other":1`, 1),
@@ -44,7 +51,7 @@ func TestNativeReviewAdvertisedDetailRoute(t *testing.T) {
 		text := strings.Repeat("界", 300)
 		rows = append(rows, sdk.InteractionRecord{ID: fmt.Sprint("work-", i), Sequence: i, Kind: sdk.InteractionNotice, Details: sdk.InteractionDetails{WorkSession: "ws", Work: &sdk.InteractionWorkChange{Session: "ws", Plan: &text, Result: &text, EvidenceReadback: &text}}})
 	}
-	k := newFakeKV()
+	k := newFakeBroker()
 	denied := false
 	k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 		if op != "interaction.query" {
@@ -72,34 +79,32 @@ func TestNativeReviewAdvertisedDetailRoute(t *testing.T) {
 	first := h.result("review", map[string]any{})
 	firstRaw, _ := json.Marshal(first)
 	t.Logf("REVIEW_SCHEMA_PROOF %s", firstRaw)
-	route := first["diagnostics"].([]any)[0].(map[string]any)["result_detail_request"].(map[string]any)
-	attempt := first["diagnostics"].([]any)[0].(map[string]any)
+	attempt := first["attempts"].([]any)[0].(map[string]any)
+	route := attempt["result_detail_request"].(map[string]any)
 	if attempt["reason_code"] != "RECORDED_FAILURE" || !strings.HasSuffix(attempt["result_excerpt"].(string), "exact failure cause") {
 		t.Fatal("handler lost structured reason or trailing diagnostic", attempt)
 	}
-	material := h.result("plan", map[string]any{})
-	materialAttempt := material["review"].(map[string]any)["diagnostics"].([]any)[0].(map[string]any)
-	if materialAttempt["reason_code"] != attempt["reason_code"] || materialAttempt["result_excerpt"] != attempt["result_excerpt"] {
-		t.Fatal("current material lost the review diagnostics", materialAttempt)
-	}
-	materialRaw, _ := json.Marshal(material)
-	t.Logf("PLAN_SCHEMA_PROOF %s", materialRaw)
 	h.workSession = map[string]any{"id": "later-work"}
 	got := h.result("review", route)
 	detail := got["result_detail"].(map[string]any)
-	if detail["content"] != rows[1].Content || detail["work_session_id"] != "ws" || detail["reason_code"] != "RECORDED_FAILURE" || k.puts != 0 {
-		t.Fatal(got, k.puts)
+	if detail["content"] != rows[1].Content || detail["work_session_id"] != "ws" || detail["reason_code"] != "RECORDED_FAILURE" {
+		t.Fatal(got)
 	}
 	raw, _ := json.Marshal(got)
 	if len(raw) > assessment.MaxReviewBytes || len(got) != 6 || got["counts"] != nil || got["attempts"] != nil || got["scope"] != "retained_result_detail" {
 		t.Fatal("detail repeated the aggregate or exceeded its budget")
 	}
 	t.Logf("REVIEW_SCHEMA_PROOF %s", raw)
+	ref := route["result_ref"].(map[string]any)
 	route["source_incarnation"] = "old"
+	if code := h.failure("review", route); code != "OPERATION_ARGUMENT_INVALID" {
+		t.Fatal("a reference from another source passed as this one", code)
+	}
+	ref["incarnation"] = "old"
 	if code := h.failure("review", route); code != "REVIEW_SOURCE_CHANGED" {
 		t.Fatal(code)
 	}
-	route["source_incarnation"] = "inc"
+	route["source_incarnation"], ref["incarnation"] = "inc", "inc"
 	route["work_session_id"] = "other"
 	if code := h.failure("review", route); code != "REVIEW_RESULT_UNAVAILABLE" {
 		t.Fatal(code)

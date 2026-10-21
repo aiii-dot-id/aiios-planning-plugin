@@ -32,8 +32,13 @@ func TestCompactFourteenReadsPreservesUnknownsAndFullRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	compact := got.Compact()
-	if compact.Counts.RecordedRequests != 14 || compact.Counts.Succeeded != 14 || len(compact.Diagnostics) != 0 || compact.Omitted.SuccessfulAttempts != 14 || compact.Omitted.EvidenceRefs != 29 || !strings.Contains(compact.Correctness, "unknown") {
+	if compact.Counts.RecordedRequests != 14 || compact.Counts.Succeeded != 14 || len(compact.Attempts) != CompactAttemptLimit || compact.Omitted.Attempts != 14-CompactAttemptLimit || !strings.Contains(compact.Correctness, "unknown") {
 		t.Fatal(compact)
+	}
+	for i, a := range compact.Attempts {
+		if a.ID != got.Attempts[13-i].ID || a.ResultDetailRequest == nil || a.RequestRef.Incarnation != got.SourceIncarnation || a.ResultRef.Incarnation != got.SourceIncarnation {
+			t.Fatal("what worked is not shown newest first with citable references", a)
+		}
 	}
 	if compact.FullReviewRequest.View != "full" || compact.FullReviewRequest.WorkSession != "ws" || compact.FullReviewRequest.RecordLimit != q.RecordLimit {
 		t.Fatal(compact.FullReviewRequest)
@@ -47,8 +52,8 @@ func TestCompactFourteenReadsPreservesUnknownsAndFullRoute(t *testing.T) {
 	}
 	small, _ := json.Marshal(got)
 	large, _ := json.Marshal(full)
-	if len(small)*4 >= len(large) {
-		t.Fatal("compact repeated successful evidence", len(small), len(large))
+	if len(small)*2 >= len(large) {
+		t.Fatal("compact repeated every successful attempt", len(small), len(large))
 	}
 	t.Logf("SYNTHETIC_14_READS full=%d compact=%d reduction=%.2f%%", len(large), len(small), 100*(1-float64(len(small))/float64(len(large))))
 	if len(got.Attempts) != 14 || len(got.Evidence) != 29 {
@@ -72,10 +77,13 @@ func TestCompactRecentFailuresKeepExactReferencesAndDiagnosticTails(t *testing.T
 		t.Fatal(err)
 	}
 	c := got.Compact()
-	if c.Counts.RecordedRequests != 9 || c.Counts.Refused != 7 || c.Counts.Succeeded != 2 || len(c.Diagnostics) != 5 || c.Omitted.OtherDiagnostics != 2 || c.Omitted.SuccessfulAttempts != 2 {
+	if c.Counts.RecordedRequests != 9 || c.Counts.Refused != 7 || c.Counts.Succeeded != 2 || len(c.Attempts) != 7 || c.Omitted.Attempts != 2 {
 		t.Fatal(c)
 	}
-	for i, a := range c.Diagnostics {
+	if c.Attempts[0].ID != got.Attempts[8].ID || c.Attempts[1].ID != got.Attempts[7].ID || c.Attempts[0].Outcome != "succeeded" || c.Attempts[0].ResultDetailRequest == nil {
+		t.Fatal("the attempts that worked are not shown", c.Attempts[:2])
+	}
+	for i, a := range c.Attempts[2:] {
 		original := got.Attempts[6-i]
 		if a.ID != original.ID || a.RequestRef == nil || a.ResultRef == nil || *a.ResultRef != *original.ResultRef || a.ReasonCode != "ARGUMENTS_REQUIRED" || !strings.HasSuffix(a.ResultExcerpt, "missing required command for shell") {
 			t.Fatal(a)
@@ -92,12 +100,11 @@ func TestCompactRecentFailuresKeepExactReferencesAndDiagnosticTails(t *testing.T
 			t.Fatal(detail, err)
 		}
 	}
-	if len(c.Evidence) != 10 || c.Omitted.EvidenceRefs != len(got.Evidence)-10 {
-		t.Fatal("lost or invented evidence", c)
-	}
-	for _, e := range c.Evidence {
-		if e.Incarnation != got.SourceIncarnation {
-			t.Fatal(e)
+	for _, a := range c.Attempts {
+		for _, e := range []Ref{*a.RequestRef, *a.ResultRef, a.ResultDetailRequest.ResultRef} {
+			if e.Incarnation != got.SourceIncarnation {
+				t.Fatal("a reference cannot be copied into Memory evidence", e)
+			}
 		}
 	}
 	if got.Attempts[6].ResultDetailRequest == nil || !got.Attempts[6].ResultExcerptTruncated {
@@ -110,10 +117,10 @@ func TestCompactRecentFailuresKeepExactReferencesAndDiagnosticTails(t *testing.T
 	}
 	f.rows = f.rows[:len(f.rows)-1]
 	missing, err := Review(f, q)
-	if err != nil || missing.Counts.Unknown != 1 || missing.Coverage.Complete || missing.Compact().Diagnostics[0].Outcome != "unknown" {
+	if err != nil || missing.Counts.Unknown != 1 || missing.Coverage.Complete || missing.Compact().Attempts[0].Outcome != "unknown" {
 		t.Fatal(missing, err)
 	}
-	route := c.Diagnostics[0].ResultDetailRequest
+	route := c.Attempts[0].ResultDetailRequest
 	d := DefaultReviewRequest("other")
 	d.SourceIncarnation = route.SourceIncarnation
 	d.ResultRef = &route.ResultRef
@@ -131,21 +138,8 @@ func TestCompactFoldsWorkWithoutHidingCoverageOrMutatingFullHistory(t *testing.T
 		t.Fatal(err)
 	}
 	c := got.Compact()
-	if c.Coverage.Complete || !reflect.DeepEqual(c.Coverage, got.Coverage) || c.Omitted.WorkChanges != len(got.WorkChanges) || !reflect.DeepEqual(*c.CurrentWork, CurrentWork(got)) {
+	if c.Coverage.Complete || !reflect.DeepEqual(c.Coverage, got.Coverage) || c.Omitted.WorkChanges != len(got.WorkChanges) || !reflect.DeepEqual(c.CurrentWork, CurrentWork(got)) {
 		t.Fatal(c)
-	}
-	material := got.Material()
-	inner := material["review"].(CompactReview)
-	if inner.CurrentWork != nil || material["current_work"] == nil {
-		t.Fatal("material duplicated or lost work", material)
-	}
-	q.View = "full"
-	full, err := Review(newFixture(sample("passed"), 0), q)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := full.Material()["review"].(ReviewResult); !ok {
-		t.Fatal("full material shape changed")
 	}
 	for _, view := range []string{"all", "none", "FULL"} {
 		q.View = view

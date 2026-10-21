@@ -1,18 +1,16 @@
 {
   "id": "id.aeon.planning",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "plugin_family": "tool_bridge",
   "publisher": "AI Identity Incorporated",
   "title": "Aeon Planning",
-  "description": "Current work material, recorded request reviews and bounded planning calibration.",
+  "description": "Reviews of recorded work sessions, during or after the work, with exact evidence references.",
   "license": "Apache-2.0",
   "interface": {
     "id": "id.aeon.planning.core",
-    "version": 2
+    "version": 3
   },
   "capability_envelope": [
-    "ring4.kv",
-    "fs.private",
     "interaction.read"
   ],
   "variants": [
@@ -24,8 +22,6 @@
       "execution_runtime": "native_t3_component",
       "admission_profile": "platform_reserved",
       "variant_capabilities": [
-        "ring4.kv",
-        "fs.private",
         "interaction.read"
       ],
       "artifact": "dist/id.aeon.planning-linux-x86_64"
@@ -38,18 +34,9 @@
       "execution_runtime": "native_t3_component",
       "admission_profile": "platform_reserved",
       "variant_capabilities": [
-        "ring4.kv",
-        "fs.private",
         "interaction.read"
       ],
       "artifact": "dist/id.aeon.planning-macos-arm64"
-    }
-  ],
-  "subscriptions": [
-    {
-      "topic": "tool.called",
-      "operation": "observe",
-      "delivery": "calibration_v1"
     }
   ],
   "homepage": "https://github.com/aiii-dot-id/aiios-planning-plugin",

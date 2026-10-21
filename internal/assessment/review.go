@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 )
@@ -23,6 +22,9 @@ type ResultSelection struct {
 	WorkSession       string `json:"work_session_id"`
 	SourceIncarnation string `json:"source_incarnation"`
 	ResultRef         Ref    `json:"result_ref"`
+	ReadLimit         int    `json:"read_limit"`
+	RecordLimit       int    `json:"record_limit"`
+	DetailLimit       int    `json:"detail_limit"`
 }
 
 type WorkSelection struct {
@@ -95,7 +97,7 @@ func InvalidReviewArgument(field string) error {
 	case "source_incarnation":
 		requirement = "source_incarnation must be a string of at most 256 bytes, non-empty exactly when result_ref or work_ref is supplied; copy the original detail request unchanged"
 	case "result_ref", "work_ref":
-		requirement = "result_ref and work_ref must each contain only id (a non-empty string of at most 256 bytes), sequence (a positive decimal string) and sha256 (64 lowercase hexadecimal characters); copy the original result_detail_request or work_detail_requests entry unchanged"
+		requirement = "result_ref and work_ref must each contain only id (a non-empty string of at most 256 bytes), sequence (a positive decimal string), sha256 (64 lowercase hexadecimal characters) and optionally incarnation (equal to source_incarnation); copy the original result_detail_request or work_detail_requests entry unchanged"
 	case "reference_selection":
 		requirement = "result_ref and work_ref are mutually exclusive; copy just one original detail request unchanged"
 	case "work_field_pair":
@@ -106,6 +108,15 @@ func InvalidReviewArgument(field string) error {
 		requirement = "unsupported review argument; use only the documented work_session_id, view, include_descendants, read_limit, record_limit, detail_limit, source_incarnation, result_ref, work_ref and work_field fields"
 	}
 	return fmt.Errorf("%w: %s. Example with an acting work session: {\"view\":\"compact\"}; otherwise supply an existing work_session_id", ErrInvalid, requirement)
+}
+
+func (r *Ref) in(incarnation string) *Ref {
+	if r == nil {
+		return nil
+	}
+	v := *r
+	v.Incarnation = incarnation
+	return &v
 }
 
 func (q ReviewRequest) Validate() error {
@@ -123,7 +134,7 @@ func (q ReviewRequest) Validate() error {
 		return InvalidReviewArgument("source_incarnation")
 	}
 	for i, r := range []*Ref{q.ResultRef, q.WorkRef} {
-		if r != nil && (r.ID == "" || len(r.ID) > 256 || r.Sequence == 0 || !validHash(r.SHA256)) {
+		if r != nil && (r.ID == "" || len(r.ID) > 256 || r.Sequence == 0 || !validHash(r.SHA256) || r.Incarnation != "" && r.Incarnation != q.SourceIncarnation) {
 			return InvalidReviewArgument([]string{"result_ref", "work_ref"}[i])
 		}
 	}
@@ -155,13 +166,11 @@ func (q ReviewRequest) Validate() error {
 
 type Counts struct {
 	RecordedRequests int `json:"recorded_requests"`
-
-	Admissions int `json:"admissions"`
-	Succeeded  int `json:"succeeded"`
-	Failed     int `json:"failed"`
-	Refused    int `json:"refused"`
-	Cancelled  int `json:"cancelled"`
-	Unknown    int `json:"unknown"`
+	Succeeded        int `json:"succeeded"`
+	Failed           int `json:"failed"`
+	Refused          int `json:"refused"`
+	Cancelled        int `json:"cancelled"`
+	Unknown          int `json:"unknown"`
 }
 
 type WorkFact struct {
@@ -174,22 +183,22 @@ type WorkFact struct {
 }
 
 type ReviewResult struct {
-	Request           ReviewRequest           `json:"-"`
-	OwnCallExclusion  string                  `json:"own_call_exclusion"`
-	ExcludedCallID    string                  `json:"excluded_call_id,omitempty"`
-	Evidence          []sdk.MemoryEvidenceRef `json:"evidence"`
-	Identity          string                  `json:"identity"`
-	WorkSession       string                  `json:"work_session_id"`
-	SourceIncarnation string                  `json:"source_incarnation"`
-	Scope             string                  `json:"scope"`
-	CountBasis        string                  `json:"count_basis"`
-	Coverage          Coverage                `json:"coverage"`
-	Counts            *Counts                 `json:"counts"`
-	Attempts          []Attempt               `json:"attempts"`
-	UnmatchedResults  []Ref                   `json:"unmatched_results"`
-	WorkChanges       []WorkFact              `json:"work_changes"`
-	ResultDetail      *ResultDetail           `json:"result_detail,omitempty"`
-	WorkDetail        *WorkDetail             `json:"work_detail,omitempty"`
+	Request           ReviewRequest `json:"-"`
+	OwnCallExclusion  string        `json:"own_call_exclusion"`
+	ExcludedCallID    string        `json:"excluded_call_id,omitempty"`
+	Evidence          []Ref         `json:"evidence"`
+	Identity          string        `json:"identity"`
+	WorkSession       string        `json:"work_session_id"`
+	SourceIncarnation string        `json:"source_incarnation"`
+	Scope             string        `json:"scope"`
+	CountBasis        string        `json:"count_basis"`
+	Coverage          Coverage      `json:"coverage"`
+	Counts            *Counts       `json:"counts"`
+	Attempts          []Attempt     `json:"attempts"`
+	UnmatchedResults  []Ref         `json:"unmatched_results"`
+	WorkChanges       []WorkFact    `json:"work_changes"`
+	ResultDetail      *ResultDetail `json:"result_detail,omitempty"`
+	WorkDetail        *WorkDetail   `json:"work_detail,omitempty"`
 }
 
 func (r ReviewResult) MarshalJSON() ([]byte, error) {
@@ -227,6 +236,8 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 	if reader == nil {
 		return ReviewResult{}, ErrInvalid
 	}
+
+	q.ResultRef, q.WorkRef = q.ResultRef.in(q.SourceIncarnation), q.WorkRef.in(q.SourceIncarnation)
 	c := &collection{
 		sessionOnly: true, includeDescendants: q.IncludeDescendants, excludeCallID: q.ExcludeCallID, selected: map[string]bool{},
 		q: Request{WorkSession: q.WorkSession, End: Ref{Sequence: math.MaxInt64}, Limits: Limits{ReadCalls: q.ReadLimit, Records: q.RecordLimit, DetailBytes: q.DetailLimit}},
@@ -241,7 +252,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 	}
 	out := ReviewResult{Request: q, Identity: c.q.Identity, WorkSession: q.WorkSession, SourceIncarnation: c.out.SourceIncarnation, Scope: "retained_session_without_descendants", CountBasis: "retained_recorded_requests", Attempts: c.out.Attempts, UnmatchedResults: []Ref{}, WorkChanges: []WorkFact{}}
 	out.OwnCallExclusion = "unavailable"
-	out.Evidence = []sdk.MemoryEvidenceRef{}
+	out.Evidence = []Ref{}
 	if q.ExcludeCallID != "" {
 		out.OwnCallExclusion = "host_record_excluded"
 		out.ExcludedCallID = q.ExcludeCallID
@@ -255,12 +266,11 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 			continue
 		}
 		matched = true
-		ref := RecordRef(r)
-		out.Evidence = append(out.Evidence, sdk.MemoryEvidenceRef{ID: ref.ID, Sequence: strconv.FormatUint(ref.Sequence, 10), SHA256: ref.SHA256, Incarnation: c.out.SourceIncarnation})
+		out.Evidence = append(out.Evidence, c.ref(r))
 		if r.Kind == sdk.InteractionToolResult {
 			parent, ok := c.seen[r.RelatedID]
 			if !ok || parent.Kind != sdk.InteractionToolCall || parent.Details.WorkSession != r.Details.WorkSession {
-				out.UnmatchedResults = append(out.UnmatchedResults, RecordRef(r))
+				out.UnmatchedResults = append(out.UnmatchedResults, c.ref(r))
 				c.missing("result_without_selected_admission")
 			}
 		}
@@ -271,7 +281,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 		if w.Session != r.Details.WorkSession {
 			return ReviewResult{}, protocol("work change belongs to another session")
 		}
-		fact := WorkFact{Ref: RecordRef(r), ProjectID: r.ProjectID, TurnID: r.TurnID, Change: w, TruncatedFields: []string{}}
+		fact := WorkFact{Ref: c.ref(r), ProjectID: r.ProjectID, TurnID: r.TurnID, Change: w, TruncatedFields: []string{}}
 		for _, field := range workFields(&fact.Change) {
 			if *field.value == nil {
 				continue
@@ -293,7 +303,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 	if !matched {
 		c.missing("no_recorded_session_evidence")
 	} else {
-		out.Counts = &Counts{Admissions: len(out.Attempts), RecordedRequests: len(out.Attempts)}
+		out.Counts = &Counts{RecordedRequests: len(out.Attempts)}
 		for _, a := range out.Attempts {
 			switch a.Outcome {
 			case "succeeded":
@@ -315,7 +325,7 @@ func Review(reader Reader, q ReviewRequest) (ReviewResult, error) {
 		if !ok || !c.selected[r.ID] || r.Kind != sdk.InteractionNotice || r.Details.Work == nil {
 			return ReviewResult{}, ErrWorkFieldUnavailable
 		}
-		if RecordRef(r) != *q.WorkRef {
+		if c.ref(r) != *q.WorkRef {
 			return ReviewResult{}, ErrConflict
 		}
 		if r.Details.WorkSession == "" || r.Details.Work.Session != r.Details.WorkSession || !q.IncludeDescendants && r.Details.WorkSession != q.WorkSession {

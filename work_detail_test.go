@@ -15,9 +15,9 @@ import (
 	"github.com/aiii-dot-id/aiios-planning-plugin/internal/assessment"
 )
 
-func workNoticeHarness(t *testing.T, rows []sdk.InteractionRecord, transportID string) (*harness, *fakeKV) {
+func workNoticeHarness(t *testing.T, rows []sdk.InteractionRecord, transportID string) (*harness, *fakeBroker) {
 	t.Helper()
-	k := newFakeKV()
+	k := newFakeBroker()
 	k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 		var value any
 		switch op {
@@ -152,15 +152,12 @@ func TestNativeWorkNoticeRoutesAndRefusals(t *testing.T) {
 		log("REVIEW_INPUT_SCHEMA_PROOF", route)
 		log("REVIEW_SCHEMA_PROOF", got)
 	}
-	material := h.result("plan", map[string]any{})
-	log("PLAN_SCHEMA_PROOF", material)
 
 	h.workSession = map[string]any{"id": "ws"}
-	material = h.result("plan", map[string]any{})
-	if len(material["current_work"].(map[string]any)["work_detail_requests"].([]any)) != 10 {
-		t.Fatal(material)
+	current := h.result("review", map[string]any{})
+	if len(current["current_work"].(map[string]any)["work_detail_requests"].([]any)) != 10 {
+		t.Fatal(current)
 	}
-	log("PLAN_SCHEMA_PROOF", material)
 	full := h.result("review", map[string]any{"work_session_id": "ws", "include_descendants": true, "view": "full"})
 	log("REVIEW_SCHEMA_PROOF", full)
 	var childRoute map[string]any
@@ -184,7 +181,7 @@ func TestNativeWorkNoticeRoutesAndRefusals(t *testing.T) {
 		ref := route["work_ref"].(map[string]any)
 		switch tc.name {
 		case "incarnation":
-			route["source_incarnation"] = "old"
+			route["source_incarnation"], ref["incarnation"] = "old", "old"
 		case "hash":
 			ref["sha256"] = strings.Repeat("b", 64)
 		case "sequence":
@@ -232,9 +229,6 @@ func TestNativeWorkNoticeRoutesAndRefusals(t *testing.T) {
 	if code := h.failure("review", routes[0].(map[string]any)); code != "POLICY_DENY" {
 		t.Fatal("query denial hidden", code)
 	}
-	if k.puts != 0 || len(k.m) != 0 || len(k.files) != 0 {
-		t.Fatal("detail wrote plugin state", k.puts, k.m, k.files)
-	}
 }
 
 func TestNativeWorkDetailAvoidsAggregateBudgetCycle(t *testing.T) {
@@ -243,7 +237,7 @@ func TestNativeWorkDetailAvoidsAggregateBudgetCycle(t *testing.T) {
 	for i := 1; i <= 40; i++ {
 		rows = append(rows, sdk.InteractionRecord{ID: fmt.Sprint("work-", i), Sequence: uint64(i), Kind: sdk.InteractionNotice, Details: sdk.InteractionDetails{WorkSession: "ws", Work: &sdk.InteractionWorkChange{Session: "ws", Plan: &text, Falsifier: &text}}})
 	}
-	h, k := workNoticeHarness(t, rows, "")
+	h, _ := workNoticeHarness(t, rows, "")
 	compact := h.result("review", map[string]any{})
 	routes := compact["current_work"].(map[string]any)["work_detail_requests"].([]any)
 	if len(routes) != 2 {
@@ -264,9 +258,6 @@ func TestNativeWorkDetailAvoidsAggregateBudgetCycle(t *testing.T) {
 		}
 		t.Logf("REVIEW_SCHEMA_PROOF %s", raw)
 	}
-	if k.puts != 0 {
-		t.Fatal("read wrote plugin state")
-	}
 }
 
 func TestNativeWorkFieldClearMissingAndEncodedBudget(t *testing.T) {
@@ -279,7 +270,7 @@ func TestNativeWorkFieldClearMissingAndEncodedBudget(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := sdk.InteractionRecord{ID: "work", Sequence: 1, Kind: sdk.InteractionNotice, Details: sdk.InteractionDetails{WorkSession: "ws", Work: &sdk.InteractionWorkChange{Session: "ws", Falsifier: &tc.value}}}
-			h, k := workNoticeHarness(t, []sdk.InteractionRecord{r}, "work")
+			h, _ := workNoticeHarness(t, []sdk.InteractionRecord{r}, "work")
 			ref, _ := json.Marshal(assessment.RecordRef(r))
 			var wireRef map[string]any
 			json.Unmarshal(ref, &wireRef)
@@ -298,9 +289,6 @@ func TestNativeWorkFieldClearMissingAndEncodedBudget(t *testing.T) {
 					t.Fatal("unbounded detail")
 				}
 				t.Logf("REVIEW_SCHEMA_PROOF %s", raw)
-			}
-			if k.puts != 0 {
-				t.Fatal("read wrote state")
 			}
 		})
 	}

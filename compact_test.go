@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
-	"github.com/aiii-dot-id/aiios-planning-plugin/internal/t3"
 )
 
 func TestCompactSelectionAndPrimaryReview(t *testing.T) {
@@ -17,21 +16,10 @@ func TestCompactSelectionAndPrimaryReview(t *testing.T) {
 		if err != nil || q.View == "" {
 			t.Fatal(q, err)
 		}
-		if err = t3.ValidatePublic([]byte(raw)); err != nil {
-			t.Fatal(raw, err)
-		}
 	}
 	for _, raw := range []string{`{"view":""}`, `{"view":"all"}`, `{"view":null}`, `{"view":true}`} {
 		if _, err := parseReviewContext([]byte(raw), sdk.WorkSession{ID: "ws"}); err == nil {
 			t.Fatal(raw)
-		}
-		if err := t3.ValidatePublic([]byte(raw)); err == nil {
-			t.Fatal(raw)
-		}
-	}
-	for _, raw := range []string{`{"mode":"status","plan_id":"p","view":"full"}`, `{"mode":"begin","view":"compact"}`, `{"mode":"abandon","view":"compact"}`} {
-		if err := t3.ValidatePublic([]byte(raw)); err == nil {
-			t.Fatal("view altered a legacy mode", raw)
 		}
 	}
 	primary := []string{}
@@ -42,7 +30,7 @@ func TestCompactSelectionAndPrimaryReview(t *testing.T) {
 			primary = append(primary, d.ID)
 		}
 	}
-	if !reflect.DeepEqual(primary, []string{"review"}) || !reflect.DeepEqual(operations, []string{"observe", "plan", "review"}) {
+	if !reflect.DeepEqual(primary, []string{"review"}) || !reflect.DeepEqual(operations, []string{"review"}) {
 		t.Fatal(primary, operations)
 	}
 }
@@ -53,7 +41,7 @@ func TestNativeCompactFullRoutePreservesUnknownEvidence(t *testing.T) {
 		{ID: "call", Sequence: 1, Kind: sdk.InteractionToolCall, TurnID: "turn", Source: source, Details: sdk.InteractionDetails{WorkSession: "ws", Tool: "shell"}},
 		{ID: "result", Sequence: 2, Kind: sdk.InteractionToolResult, TurnID: "turn", Source: source, RelatedID: "call", Outcome: sdk.InteractionSucceeded, Content: "command exited 9", Details: sdk.InteractionDetails{WorkSession: "ws", Tool: "shell"}},
 	}
-	k := newFakeKV()
+	k := newFakeBroker()
 	k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 		if op != "interaction.query" {
 			t.Fatal(op)
@@ -73,8 +61,20 @@ func TestNativeCompactFullRoutePreservesUnknownEvidence(t *testing.T) {
 	h := startHarness(t, k)
 	h.workSession = map[string]any{"id": "ws"}
 	compact := h.result("review", map[string]any{})
-	if compact["view"] != "compact" || compact["correctness"] == nil || len(compact["diagnostics"].([]any)) != 0 || compact["omitted"].(map[string]any)["successful_attempts"] != float64(1) {
+	shown := compact["attempts"].([]any)
+	if compact["view"] != "compact" || compact["correctness"] == nil || len(shown) != 1 || compact["omitted"].(map[string]any)["attempts"] != float64(0) {
 		t.Fatal(compact)
+	}
+
+	worked := shown[0].(map[string]any)
+	for _, name := range []string{"request_ref", "result_ref"} {
+		ref := worked[name].(map[string]any)
+		if worked["outcome"] != "succeeded" || len(ref) != 4 || ref["id"] == nil || ref["sequence"] == nil || ref["sha256"] == nil || ref["incarnation"] != "inc" {
+			t.Fatal(name, worked)
+		}
+	}
+	if compact["evidence"] != nil || compact["diagnostics"] != nil || compact["counts"].(map[string]any)["admissions"] != nil {
+		t.Fatal("compact repeated references or counts", compact)
 	}
 	route := compact["full_review_request"].(map[string]any)
 	full := h.result("review", route)
@@ -82,17 +82,11 @@ func TestNativeCompactFullRoutePreservesUnknownEvidence(t *testing.T) {
 	if len(attempts) != 1 || attempts[0].(map[string]any)["result_excerpt"] != "command exited 9" || full["view"] != nil || len(full["evidence"].([]any)) != 2 {
 		t.Fatal(full)
 	}
-	if !reflect.DeepEqual(full["counts"], compact["counts"]) || full["source_incarnation"] != compact["source_incarnation"] || k.puts != 0 {
+	if !reflect.DeepEqual(full["counts"], compact["counts"]) || full["source_incarnation"] != compact["source_incarnation"] {
 		t.Fatal("full route changed counts/source or wrote state")
 	}
 	for _, v := range []map[string]any{compact, full} {
 		b, _ := json.Marshal(v)
 		t.Logf("REVIEW_SCHEMA_PROOF %s", b)
 	}
-	material := h.result("plan", map[string]any{})
-	if material["review"].(map[string]any)["current_work"] != nil || material["current_work"] == nil {
-		t.Fatal("material duplicates work")
-	}
-	b, _ := json.Marshal(material)
-	t.Logf("PLAN_SCHEMA_PROOF %s", b)
 }

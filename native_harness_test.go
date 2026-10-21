@@ -5,141 +5,29 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path"
 	"runtime/debug"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 )
 
-type fakeKV struct {
+type fakeBroker struct {
 	readOnlyCall func(string, json.RawMessage, json.RawMessage) ([]byte, bool)
-	mu           sync.Mutex
-	m            map[string]string
-	files        map[string][]byte
-	puts         int
-	failAt       int
-	failAfter    bool
 }
 
-func newFakeKV() *fakeKV { return &fakeKV{m: map[string]string{}, files: map[string][]byte{}} }
+func newFakeBroker() *fakeBroker { return &fakeBroker{} }
 
-func (k *fakeKV) call(operation string, target, arguments json.RawMessage) ([]byte, bool) {
+func (k *fakeBroker) call(operation string, target, arguments json.RawMessage) ([]byte, bool) {
 	if k.readOnlyCall != nil {
 		return k.readOnlyCall(operation, target, arguments)
 	}
-	if strings.HasPrefix(operation, "fs.") {
-		return k.fileCall(operation, target, arguments)
-	}
-	switch operation {
-	case "kv.put":
-
-		var tgt struct {
-			Key string `json:"key"`
-		}
-		if err := json.Unmarshal(target, &tgt); err != nil {
-			return failedBody("KV_ARGUMENT_INVALID", err.Error()), false
-		}
-		var args struct {
-			Value string `json:"value"`
-		}
-		if err := json.Unmarshal(arguments, &args); err != nil {
-			return failedBody("KV_ARGUMENT_INVALID", err.Error()), false
-		}
-		key := tgt.Key
-		k.mu.Lock()
-		k.puts++
-		fail := k.puts == k.failAt
-		if fail && !k.failAfter {
-			k.mu.Unlock()
-			return failedBody("INJECTED_WRITE", "injected before commit"), false
-		}
-		k.m[key] = args.Value
-		k.mu.Unlock()
-		if fail {
-			return failedBody("INJECTED_WRITE", "injected after commit"), false
-		}
-		body, _ := json.Marshal(map[string]any{
-			"status": "succeeded",
-			"operation_result": map[string]any{
-				"stored": true, "key": key, "value_bytes": len(args.Value), "scope": "persistent",
-			},
-		})
-		return body, false
-
-	case "kv.get":
-
-		var args struct {
-			Key string `json:"key"`
-		}
-		if err := json.Unmarshal(target, &args); err != nil {
-			return failedBody("KV_ARGUMENT_INVALID", err.Error()), false
-		}
-		k.mu.Lock()
-		v, ok := k.m[args.Key]
-		k.mu.Unlock()
-		if !ok {
-			return failedBody("KV_NOT_FOUND", "no such key: "+args.Key), false
-		}
-		body, _ := json.Marshal(map[string]any{
-			"status":           "succeeded",
-			"operation_result": map[string]any{"key": args.Key, "value": v},
-		})
-		return body, false
-
-	case "kv.delete":
-
-		var args struct {
-			Key string `json:"key"`
-		}
-		if err := json.Unmarshal(target, &args); err != nil {
-			return failedBody("KV_ARGUMENT_INVALID", err.Error()), false
-		}
-		k.mu.Lock()
-		_, ok := k.m[args.Key]
-		delete(k.m, args.Key)
-		k.mu.Unlock()
-		body, _ := json.Marshal(map[string]any{
-			"status":           "succeeded",
-			"operation_result": map[string]any{"deleted": ok},
-		})
-		return body, false
-
-	case "kv.list":
-
-		var args struct {
-			Prefix string `json:"prefix"`
-		}
-		if err := json.Unmarshal(target, &args); err != nil {
-			return failedBody("KV_ARGUMENT_INVALID", err.Error()), false
-		}
-		k.mu.Lock()
-		keys := []string{}
-		for key := range k.m {
-			if strings.HasPrefix(key, args.Prefix) {
-				keys = append(keys, key)
-			}
-		}
-		k.mu.Unlock()
-		body, _ := json.Marshal(map[string]any{
-			"status":           "succeeded",
-			"operation_result": map[string]any{"keys": keys, "truncated": false},
-		})
-		return body, false
-	}
-
-	return denyBody("the harness broker grants kv only; " + operation + " is not granted"), true
+	return denyBody("the harness broker grants nothing; " + operation + " is not granted"), true
 }
 
 func denyBody(message string) []byte {
@@ -149,15 +37,6 @@ func denyBody(message string) []byte {
 		"data":    map[string]string{"reasonCode": "POLICY_DENY", "denied_at": "capability_evaluation"},
 	})
 	return b
-}
-
-func failedBody(code, reason string) []byte {
-	q, _ := json.Marshal(code)
-	r, _ := json.Marshal(reason)
-	_ = r
-	return []byte(`{"success":false,"ok":false,"status":"failed","reason":` + string(q) +
-		`,"reasonCode":` + string(q) + `,"reason_code":` + string(q) +
-		`,"operation_result":null,"external_receipt":{}}`)
 }
 
 func TestNativeHarnessChild(t *testing.T) {
@@ -186,13 +65,13 @@ type harness struct {
 	cmd         *exec.Cmd
 	in          io.WriteCloser
 	rd          io.Reader
-	kv          *fakeKV
+	broker      *fakeBroker
 	nextID      int
 	waited      bool
 	workSession map[string]any
 }
 
-func startHarness(t *testing.T, kv *fakeKV, extraEnv ...string) *harness {
+func startHarness(t *testing.T, broker *fakeBroker, extraEnv ...string) *harness {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestNativeHarnessChild$")
@@ -211,7 +90,7 @@ func startHarness(t *testing.T, kv *fakeKV, extraEnv ...string) *harness {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	h := &harness{t: t, cmd: cmd, in: in, rd: out, kv: kv}
+	h := &harness{t: t, cmd: cmd, in: in, rd: out, broker: broker}
 	t.Cleanup(func() {
 		if h.waited {
 			return
@@ -274,7 +153,7 @@ func (h *harness) call(operation string, args map[string]any) map[string]json.Ra
 			if err := json.Unmarshal(obj["params"], &params); err != nil {
 				h.t.Fatal(err)
 			}
-			body, isErr := h.kv.call(params.Operation, params.Target, params.Arguments)
+			body, isErr := h.broker.call(params.Operation, params.Target, params.Arguments)
 			field := "result"
 			if isErr {
 				field = "error"
@@ -367,147 +246,4 @@ func (h *harness) failure(operation string, args map[string]any) string {
 	}
 	h.t.Fatalf("%s was expected to fail but answered: %s", operation, raw)
 	return ""
-}
-
-func TestNativeCalibratedJourney(t *testing.T) {
-	h := startHarness(t, newFakeKV())
-	host := map[string]any{"version": 1, "available": true, "session_id": "ws", "stream_id": "gen1", "emitted": 0, "settled": 0, "loss_count": 0}
-	call := func(mode string, extra map[string]any) map[string]any {
-		a := map[string]any{"mode": mode, "plan_id": "p", "_host_calibration": host}
-		for k, v := range extra {
-			a[k] = v
-		}
-		return h.result("plan", a)
-	}
-	call("begin", map[string]any{"family": "test", "declared_steps": 1, "budget_calls": 10, "falsifier_class": "failed", "expected_evidence_class": "passed", "consequence_class": "local"})
-	call("apply", map[string]any{"apply_id": "a", "step_id": "s1", "kind_class": "refinement", "from_class": "a", "to_class": "b", "count": 1})
-	host["emitted"] = 1
-	reason := h.failure("plan", map[string]any{"mode": "grade", "plan_id": "p", "result_class": "passed", "_host_calibration": host})
-	if reason != "CALIBRATION_PENDING" {
-		t.Fatal(reason)
-	}
-	h.result("observe", map[string]any{"stream_id": "gen1", "sequence": 1, "topic": "tool.called", "at": "2026-09-24T00:00:00Z", "payload": map[string]any{"tool": "read", "failed": false, "duration_ms": 0, "actor": "main", "session": "ws"}})
-	host["settled"] = 1
-	host["emitted"] = 100
-	got := call("grade", map[string]any{"result_class": "passed"})
-	if got["observed_calls"] != float64(1) || got["host_calibration"] != "complete" {
-		t.Fatal(got)
-	}
-	host["stream_id"] = "gen2"
-	got = call("status", nil)
-	if got["host_calibration"] != "complete" {
-		t.Fatal(got)
-	}
-	h.failure("plan", map[string]any{"mode": "begin", "observed_calls": 3})
-}
-
-func (k *fakeKV) fileCall(operation string, target, arguments json.RawMessage) ([]byte, bool) {
-	var tgt struct{ Root, Path string }
-	json.Unmarshal(target, &tgt)
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.files == nil {
-		k.files = map[string][]byte{}
-	}
-	success := func(v any) ([]byte, bool) {
-		b, _ := json.Marshal(map[string]any{"status": "succeeded", "operation_result": v})
-		return b, false
-	}
-	raw, exists := k.files[tgt.Path]
-	sum := func(b []byte) string { v := sha256.Sum256(b); return hex.EncodeToString(v[:]) }
-	switch operation {
-	case "fs.read":
-		if !exists {
-			return failedBody("FS_NOT_FOUND", "missing"), false
-		}
-		return success(map[string]any{"data_b64": base64.StdEncoding.EncodeToString(raw), "size": len(raw), "eof": true, "sha256": sum(raw)})
-	case "fs.publish":
-		var a struct {
-			Data     string `json:"data_b64"`
-			Expected string `json:"expected_sha256"`
-			Absent   bool   `json:"expected_absent"`
-		}
-		json.Unmarshal(arguments, &a)
-		if a.Absent && exists || a.Expected != "" && (!exists || a.Expected != sum(raw)) {
-			return failedBody("FS_CONFLICT", "conflict"), false
-		}
-		data, err := base64.StdEncoding.DecodeString(a.Data)
-		if err != nil {
-			return failedBody("FS_ARGUMENT_INVALID", "bad bytes"), false
-		}
-		k.files[tgt.Path] = data
-		return success(map[string]any{"size": len(data), "sha256": sum(data), "durable": true, "replaced": exists, "durability": "synced"})
-	case "fs.list":
-		entries := []map[string]any{}
-		seen := map[string]bool{}
-		prefix := strings.TrimSuffix(tgt.Path, "/") + "/"
-		for name := range k.files {
-			if !strings.HasPrefix(name, prefix) {
-				continue
-			}
-			rest := strings.TrimPrefix(name, prefix)
-			first := strings.Split(rest, "/")[0]
-			if seen[first] {
-				continue
-			}
-			seen[first] = true
-			entries = append(entries, map[string]any{"name": path.Base(first), "dir": strings.Contains(rest, "/"), "symlink": false})
-		}
-		return success(map[string]any{"entries": entries, "truncated": false})
-	}
-	return denyBody("unknown file operation"), true
-}
-
-func TestNativeSharedWriteFailure(t *testing.T) {
-	for _, after := range []bool{false, true} {
-		t.Run(fmt.Sprint(after), func(t *testing.T) {
-			k := newFakeKV()
-			h := startHarness(t, k)
-			host := map[string]any{"version": 1, "available": true, "session_id": "ws", "stream_id": "g", "emitted": 0, "settled": 0, "loss_count": 0}
-			args := map[string]any{"mode": "begin", "plan_id": "p", "family": "f", "declared_steps": 1, "budget_calls": 10, "falsifier_class": "failed", "expected_evidence_class": "passed", "consequence_class": "local", "_host_calibration": host}
-			k.mu.Lock()
-			k.failAt = 2
-			k.failAfter = after
-			k.mu.Unlock()
-			if got := h.failure("plan", args); got != "INJECTED_WRITE" {
-				t.Fatal(got)
-			}
-			k.mu.Lock()
-			k.failAt = 0
-			_, committed := k.m["t3/plan/p"]
-			k.mu.Unlock()
-			if committed != after {
-				t.Fatal("unexpected commit boundary", committed)
-			}
-			if !committed {
-				h.result("plan", args)
-			}
-			h.result("observe", map[string]any{"stream_id": "g", "sequence": 1, "topic": "tool.called", "at": "2026-09-24T00:00:00Z", "payload": map[string]any{"tool": "read", "failed": false, "duration_ms": 0, "actor": "main", "session": "ws"}})
-			host["emitted"] = 1
-			host["settled"] = 1
-			got := h.result("plan", map[string]any{"mode": "status", "plan_id": "p", "_host_calibration": host})
-			measured := got["measurement"].(map[string]any)
-			if measured["count"] != float64(1) || measured["cursor"] != float64(1) {
-				t.Fatal(got)
-			}
-		})
-	}
-}
-
-func TestNativeAbandonOldSession(t *testing.T) {
-	h := startHarness(t, newFakeKV())
-	host := map[string]any{"version": 1, "available": true, "session_id": "old-session", "stream_id": "gen1", "emitted": 0, "settled": 0, "loss_count": 0}
-	h.result("plan", map[string]any{"mode": "begin", "plan_id": "unfinished", "family": "test", "declared_steps": 1, "budget_calls": 10, "falsifier_class": "failed", "expected_evidence_class": "passed", "consequence_class": "local", "_host_calibration": host})
-	host["session_id"] = "new-session"
-	args := map[string]any{"mode": "abandon", "plan_id": "unfinished", "_host_calibration": host}
-	got := h.result("plan", args)
-	if got["state"] != "closed" || got["abandoned"] != true || got["host_calibration"] != "unresolved" || got["session_id"] != "old-session" {
-		t.Fatal(got)
-	}
-	for _, key := range []string{"grade_class", "observed_calls", "step_count_ok", "falsifier_ok"} {
-		if _, ok := got[key]; ok {
-			t.Fatal("invented verdict", got)
-		}
-	}
-	h.result("plan", args)
 }

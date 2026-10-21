@@ -34,7 +34,7 @@ func TestWorkDetailRoutesRecoverEveryClippedField(t *testing.T) {
 				t.Fatal(first, err)
 			}
 			route := first.WorkChanges[0].WorkDetailRequests[0]
-			if route.WorkRef != RecordRef(r) || route.WorkField != name || route.WorkSession != "ws" || !route.IncludeDescendants || route.SourceIncarnation != "incarnation" || route.ReadLimit != 64 || route.RecordLimit != 256 || route.DetailLimit != 512<<10 {
+			if route.WorkRef != reviewRef(r) || route.WorkField != name || route.WorkSession != "ws" || !route.IncludeDescendants || route.SourceIncarnation != "incarnation" || route.ReadLimit != 64 || route.RecordLimit != 256 || route.DetailLimit != 512<<10 {
 				t.Fatal("route changed original scope or bounds", route)
 			}
 			work := CurrentWork(first)

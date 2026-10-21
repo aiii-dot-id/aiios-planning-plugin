@@ -25,7 +25,7 @@ func TestReviewInputAndSchemas(t *testing.T) {
 	if err != nil || q.ReadLimit != 32 || q.RecordLimit != 100 {
 		t.Fatal(q, err)
 	}
-	for _, name := range []string{"review_in", "review_out", "plan_in", "plan_out"} {
+	for _, name := range []string{"review_in", "review_out"} {
 		raw, err := os.ReadFile("schemas/" + name + ".json")
 		if err != nil {
 			t.Fatal(err)
@@ -108,7 +108,7 @@ func TestReviewDiagnosticsPreserveValidInputsAndScope(t *testing.T) {
 }
 
 func TestNativeReviewArgumentFailuresAreActionableBeforeHostReads(t *testing.T) {
-	k := newFakeKV()
+	k := newFakeBroker()
 	reads := 0
 	k.readOnlyCall = func(string, json.RawMessage, json.RawMessage) ([]byte, bool) {
 		reads++
@@ -143,8 +143,8 @@ func TestNativeReviewArgumentFailuresAreActionableBeforeHostReads(t *testing.T) 
 			}
 		})
 	}
-	if reads != 0 || k.puts != 0 {
-		t.Fatalf("argument failures read host data or wrote state: reads=%d puts=%d", reads, k.puts)
+	if reads != 0 {
+		t.Fatalf("argument failures read host data: reads=%d", reads)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestNativeReviewIsReadOnlyAndPreservesDenial(t *testing.T) {
 	}
 	for _, denied := range []bool{false, true} {
 		t.Run(map[bool]string{false: "admitted", true: "denied"}[denied], func(t *testing.T) {
-			k := newFakeKV()
+			k := newFakeBroker()
 			reads := 0
 			k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 				reads++
@@ -196,8 +196,8 @@ func TestNativeReviewIsReadOnlyAndPreservesDenial(t *testing.T) {
 			}
 			got := h.result("review", map[string]any{"work_session_id": "ws", "view": "full"})
 			counts := got["counts"].(map[string]any)
-			if counts["failed"] != float64(1) || counts["succeeded"] != float64(0) || reads != 2 || k.puts != 0 {
-				t.Fatal(got, reads, k.puts)
+			if counts["failed"] != float64(1) || counts["succeeded"] != float64(0) || reads != 2 {
+				t.Fatal(got, reads)
 			}
 			if _, ok := got["finding"]; ok {
 				t.Fatal("review manufactured a suite grade")
@@ -248,7 +248,7 @@ func TestReviewDefaultsToTrustedCurrentWork(t *testing.T) {
 	}
 }
 
-func TestNativePlanOversizeRecoveryUsesReview(t *testing.T) {
+func TestNativeOversizeRecoveryUsesReview(t *testing.T) {
 	text := strings.Repeat("界", 300)
 	rows := make([]sdk.InteractionRecord, 36)
 	for i := range rows {
@@ -259,7 +259,7 @@ func TestNativePlanOversizeRecoveryUsesReview(t *testing.T) {
 			}},
 		}
 	}
-	k := newFakeKV()
+	k := newFakeBroker()
 	k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 		if op != "interaction.query" {
 			t.Fatalf("recovery attempted %s", op)
@@ -287,7 +287,7 @@ func TestNativePlanOversizeRecoveryUsesReview(t *testing.T) {
 	}
 	h := startHarness(t, k)
 	h.workSession = map[string]any{"id": "ws", "call_id": "current-call"}
-	response := h.call("plan", map[string]any{"view": "full"})
+	response := h.call("review", map[string]any{"view": "full"})
 	var failure struct {
 		Status     string `json:"status"`
 		ReasonCode string `json:"reasonCode"`
@@ -314,24 +314,24 @@ func TestNativePlanOversizeRecoveryUsesReview(t *testing.T) {
 		t.Fatal("advertised recovery did not fit the response budget", err, len(encoded))
 	}
 	coverage := got["coverage"].(map[string]any)
-	if len(got["work_changes"].([]any)) != int(recovery["record_limit"].(float64)) || coverage["complete"] != false || k.puts != 0 {
-		t.Fatal("recovery lost bounded evidence or wrote state", got, k.puts)
+	if len(got["work_changes"].([]any)) != int(recovery["record_limit"].(float64)) || coverage["complete"] != false {
+		t.Fatal("recovery lost bounded evidence or wrote state", got)
 	}
 }
 
-func TestNativeCurrentMaterialUsesHostWorkWithoutRegistration(t *testing.T) {
+func TestNativeReviewReadsCurrentOrDeliveredWorkWithoutRegistration(t *testing.T) {
 	focus, plan := "inspect the requested module", "read, change and verify"
 	rows := []sdk.InteractionRecord{
 		{ID: "work", Sequence: 1, Kind: sdk.InteractionNotice, Details: sdk.InteractionDetails{WorkSession: "ws", Work: &sdk.InteractionWorkChange{Session: "ws", Focus: &focus, Plan: &plan}}},
-		{ID: "own-call", Sequence: 2, Kind: sdk.InteractionToolCall, Details: sdk.InteractionDetails{WorkSession: "ws", Tool: "plan"}},
+		{ID: "own-call", Sequence: 2, Kind: sdk.InteractionToolCall, Details: sdk.InteractionDetails{WorkSession: "ws", Tool: "review"}},
 	}
 	for _, denied := range []bool{false, true} {
 		t.Run(map[bool]string{false: "read", true: "denied"}[denied], func(t *testing.T) {
-			k := newFakeKV()
-			reads := 0
+			k := newFakeBroker()
+			reads, descendants := 0, true
 			k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 				if op != "interaction.query" {
-					t.Fatalf("current material attempted %s", op)
+					t.Fatalf("review attempted %s", op)
 				}
 				reads++
 				if denied {
@@ -344,8 +344,8 @@ func TestNativeCurrentMaterialUsesHostWorkWithoutRegistration(t *testing.T) {
 				selected := rows
 				if q.Filter.WorkSession == "" {
 					selected = rows[1:]
-				} else if q.Filter.WorkSession != "ws" || !q.Filter.IncludeDescendants {
-					t.Fatal("lost current descendant scope", q)
+				} else if q.Filter.WorkSession != "ws" || q.Filter.IncludeDescendants != descendants {
+					t.Fatal("lost the selected scope", q)
 				}
 				page := sdk.InteractionPage{Version: 1, Identity: "fixture", Source: "recorded", Incarnation: "inc", Cursor: q.Cursor, Filter: q.Filter, Fingerprint: "fixture", Availability: "complete", Rows: selected}
 				raw, err := json.Marshal(map[string]any{"status": "succeeded", "operation_result": page})
@@ -356,98 +356,72 @@ func TestNativeCurrentMaterialUsesHostWorkWithoutRegistration(t *testing.T) {
 			}
 			h := startHarness(t, k)
 			h.workSession = map[string]any{"id": "ws", "call_id": "own-call"}
-			args := map[string]any{}
 			if denied {
-				if got := h.failure("plan", args); got != "POLICY_DENY" {
+				if got := h.failure("review", map[string]any{}); got != "POLICY_DENY" {
 					t.Fatal(got)
 				}
 				return
 			}
-			for _, mode := range []string{"", "material", "status"} {
-				if mode != "" {
-					args["mode"] = mode
-				}
-				got := h.result("plan", args)
+			check := func(got map[string]any) {
+				t.Helper()
 				work := got["current_work"].(map[string]any)
 				fields := work["fields"].(map[string]any)
-				if work["availability"] != "retained" || fields["focus"] != focus || fields["plan"] != plan {
+				if work["availability"] != "retained" || fields["focus"] != focus || fields["plan"] != plan || got["work_session_id"] != "ws" {
 					t.Fatal(got)
 				}
-				review := got["review"].(map[string]any)
-				if review["own_call_exclusion"] != "host_record_excluded" || review["counts"].(map[string]any)["recorded_requests"] != float64(0) {
+				if got["own_call_exclusion"] != "host_record_excluded" || got["counts"].(map[string]any)["recorded_requests"] != float64(0) {
 					t.Fatal(got)
 				}
-				if _, ok := got["plan_id"]; ok {
-					t.Fatal("material registered a calibration plan", got)
+				ref := work["field_refs"].(map[string]any)["focus"].(map[string]any)
+				if len(ref) != 4 || ref["incarnation"] != "inc" {
+					t.Fatal("a field reference cannot be copied into Memory evidence", ref)
 				}
 				b, err := json.Marshal(got)
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Logf("PLAN_SCHEMA_PROOF %s", b)
+				t.Logf("REVIEW_SCHEMA_PROOF %s", b)
 			}
-			if reads != 6 || k.puts != 0 || len(k.m) != 0 || len(k.files) != 0 {
-				t.Fatal(reads, k.puts, k.m, k.files)
+			check(h.result("review", map[string]any{}))
+
+			descendants = false
+			for _, reason := range []string{"no_session", "session_lookup_failed"} {
+				h.workSession = map[string]any{"id": "", "call_id": "own-call", "reason": reason}
+				check(h.result("review", map[string]any{"work_session_id": "ws"}))
 			}
-			h.workSession = nil
-			if code := h.failure("plan", map[string]any{}); code != "REVIEW_UNAVAILABLE" {
-				t.Fatal(code)
-			}
-			h.workSession = map[string]any{"id": "ws", "call_id": "own-call"}
-			for _, bad := range []any{nil, 42, true, ""} {
-				if code := h.failure("plan", map[string]any{"plan_id": bad}); code != "OPERATION_ARGUMENT_INVALID" {
-					t.Fatal(bad, code)
-				}
-			}
-			if code := h.failure("plan", map[string]any{"mode": nil}); code != "OPERATION_ARGUMENT_INVALID" {
-				t.Fatal(code)
-			}
-			if code := h.failure("plan", map[string]any{"_host_work_session": h.workSession}); code != "OPERATION_ARGUMENT_INVALID" {
-				t.Fatal(code)
+			h.workSession = map[string]any{"id": "later", "call_id": "own-call"}
+			check(h.result("review", map[string]any{"work_session_id": "ws"}))
+			if reads != 8 {
+				t.Fatal(reads)
 			}
 		})
 	}
 }
 
-func TestNativeBeginCanUseHostCallIDWithoutInventingDeclarations(t *testing.T) {
-	k := newFakeKV()
-	h := startHarness(t, k)
-	host := map[string]any{"version": 1, "available": true, "session_id": "ws", "stream_id": "gen", "emitted": 0, "settled": 0, "loss_count": 0}
-	work := map[string]any{"id": "ws", "call_id": "tool_call_example"}
-	h.workSession = work
-	args := map[string]any{"mode": "begin", "family": "checks", "declared_steps": 1, "budget_calls": 10, "falsifier_class": "failed", "expected_evidence_class": "passed", "consequence_class": "local", "_host_calibration": host}
-	delete(args, "expected_evidence_class")
-	if code := h.failure("plan", args); code != "OPERATION_ARGUMENT_INVALID" {
-		t.Fatal(code)
-	}
-	if k.puts != 0 {
-		t.Fatal("invalid declaration wrote state")
-	}
-	args["expected_evidence_class"] = "passed"
-	work["id"] = "other"
-	if code := h.failure("plan", args); code != "CALIBRATION_SESSION_REFUSED" {
-		t.Fatal(code)
-	}
-	work["id"] = "ws"
-	delete(work, "call_id")
-	if code := h.failure("plan", args); code != "OPERATION_ARGUMENT_INVALID" {
-		t.Fatal(code)
-	}
-	work["call_id"] = "tool_call_example"
-	got := h.result("plan", args)
-	if got["plan_id"] != "plan_tool_call_example" || got["session_id"] != "ws" {
-		t.Fatal(got)
-	}
-	b, err := json.Marshal(got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("PLAN_SCHEMA_PROOF %s", b)
-
-	h.workSession = nil
-	args["plan_id"] = "explicit"
-	got = h.result("plan", args)
-	if got["plan_id"] != "explicit" {
-		t.Fatal(got)
+func TestNativeMissingWorkNamesTheSessionRoute(t *testing.T) {
+	for reason, want := range map[string]string{
+		"no_session":            "no acting work session: pass work_session_id, which work start and work deliver print (ws_...)",
+		"session_lookup_failed": "resolve that lookup failure before retrying",
+	} {
+		t.Run(reason, func(t *testing.T) {
+			k := newFakeBroker()
+			k.readOnlyCall = func(op string, _, _ json.RawMessage) ([]byte, bool) {
+				t.Errorf("missing work reached %s", op)
+				return denyBody("no reach expected"), true
+			}
+			h := startHarness(t, k)
+			h.workSession = map[string]any{"id": "", "call_id": "call", "reason": reason}
+			var result struct {
+				Status string `json:"status"`
+				Code   string `json:"reasonCode"`
+				Reason string `json:"reason"`
+			}
+			if err := json.Unmarshal(h.call("review", map[string]any{})["result"], &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Status != "failed" || result.Code != "REVIEW_UNAVAILABLE" || !strings.Contains(result.Reason, want) || strings.Count(result.Reason, "\n") != 0 {
+				t.Fatalf("%+v", result)
+			}
+		})
 	}
 }

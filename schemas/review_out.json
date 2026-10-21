@@ -74,10 +74,6 @@
         "null"
       ],
       "properties": {
-        "admissions": {
-          "type": "integer",
-          "minimum": 0
-        },
         "succeeded": {
           "type": "integer",
           "minimum": 0
@@ -104,7 +100,6 @@
         }
       },
       "required": [
-        "admissions",
         "succeeded",
         "failed",
         "refused",
@@ -161,12 +156,18 @@
               "sha256": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              },
+              "incarnation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
               }
             },
             "required": [
               "id",
               "sequence",
-              "sha256"
+              "sha256",
+              "incarnation"
             ],
             "additionalProperties": false
           },
@@ -183,12 +184,18 @@
               "sha256": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              },
+              "incarnation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
               }
             },
             "required": [
               "id",
               "sequence",
-              "sha256"
+              "sha256",
+              "incarnation"
             ],
             "additionalProperties": false
           },
@@ -235,20 +242,44 @@
                   "sha256": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "incarnation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
                   }
                 },
                 "required": [
                   "id",
                   "sequence",
-                  "sha256"
+                  "sha256",
+                  "incarnation"
                 ],
                 "additionalProperties": false
+              },
+              "read_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 128
+              },
+              "record_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 512
+              },
+              "detail_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576
               }
             },
             "required": [
               "work_session_id",
               "source_incarnation",
-              "result_ref"
+              "result_ref",
+              "read_limit",
+              "record_limit",
+              "detail_limit"
             ],
             "additionalProperties": false
           },
@@ -265,7 +296,8 @@
         ],
         "additionalProperties": false
       },
-      "maxItems": 512
+      "maxItems": 512,
+      "description": "Compact: up to five recent attempts that did not succeed and five that succeeded, newest first, each with a result_detail_request when its result is retained. Full: every selected attempt in recorded order."
     },
     "work_changes": {
       "type": "array",
@@ -285,12 +317,18 @@
               "sha256": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              },
+              "incarnation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
               }
             },
             "required": [
               "id",
               "sequence",
-              "sha256"
+              "sha256",
+              "incarnation"
             ],
             "additionalProperties": false
           },
@@ -432,12 +470,18 @@
                     "sha256": {
                       "type": "string",
                       "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "incarnation": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
                     }
                   },
                   "required": [
                     "id",
                     "sequence",
-                    "sha256"
+                    "sha256",
+                    "incarnation"
                   ],
                   "additionalProperties": false,
                   "description": "Stable work-notice RecordRef from the original review, not the transport ContentRef."
@@ -500,12 +544,18 @@
           "sha256": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
+          },
+          "incarnation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
           }
         },
         "required": [
           "id",
           "sequence",
-          "sha256"
+          "sha256",
+          "incarnation"
         ],
         "additionalProperties": false
       },
@@ -549,7 +599,8 @@
           "incarnation"
         ],
         "additionalProperties": false
-      }
+      },
+      "description": "Full view only: every collected record of the selected work."
     },
     "result_detail": {
       "type": "object",
@@ -569,12 +620,18 @@
             "sha256": {
               "type": "string",
               "pattern": "^[0-9a-f]{64}$"
+            },
+            "incarnation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
             }
           },
           "required": [
             "id",
             "sequence",
-            "sha256"
+            "sha256",
+            "incarnation"
           ],
           "additionalProperties": false
         },
@@ -734,12 +791,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -756,12 +819,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -778,12 +847,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -800,12 +875,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -822,12 +903,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -844,12 +931,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -866,12 +959,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -888,12 +987,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -910,12 +1015,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -932,12 +1043,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -954,12 +1071,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             },
@@ -976,12 +1099,18 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^[0-9a-f]{64}$"
+                },
+                "incarnation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 }
               },
               "required": [
                 "id",
                 "sequence",
-                "sha256"
+                "sha256",
+                "incarnation"
               ],
               "additionalProperties": false
             }
@@ -1061,12 +1190,18 @@
                   "sha256": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "incarnation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
                   }
                 },
                 "required": [
                   "id",
                   "sequence",
-                  "sha256"
+                  "sha256",
+                  "incarnation"
                 ],
                 "additionalProperties": false,
                 "description": "Stable work-notice RecordRef from the original review, not the transport ContentRef."
@@ -1116,168 +1251,10 @@
       "type": "string",
       "description": "Explicitly separates host outcomes from command and task correctness; this read never verifies either."
     },
-    "diagnostics": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "tool": {
-            "type": "string"
-          },
-          "project_id": {
-            "type": "string"
-          },
-          "result_id": {
-            "type": "string"
-          },
-          "outcome": {
-            "type": "string",
-            "enum": [
-              "succeeded",
-              "failed",
-              "refused",
-              "cancelled",
-              "unknown"
-            ]
-          },
-          "duration_ms": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "work_session_id": {
-            "type": "string"
-          },
-          "request_ref": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "sequence": {
-                "type": "string",
-                "pattern": "^[0-9]+$"
-              },
-              "sha256": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
-              }
-            },
-            "required": [
-              "id",
-              "sequence",
-              "sha256"
-            ],
-            "additionalProperties": false
-          },
-          "result_ref": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "sequence": {
-                "type": "string",
-                "pattern": "^[0-9]+$"
-              },
-              "sha256": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
-              }
-            },
-            "required": [
-              "id",
-              "sequence",
-              "sha256"
-            ],
-            "additionalProperties": false
-          },
-          "result_excerpt": {
-            "type": "string",
-            "maxLength": 512,
-            "description": "At most 256 runes for succeeded outcomes, otherwise 512. Long non-success text retains a prefix and tail separated by an explicit omitted-middle marker; use result_detail_request for bounded retained detail."
-          },
-          "result_record": {
-            "type": "string"
-          },
-          "result_truncated": {
-            "type": "boolean"
-          },
-          "result_excerpt_truncated": {
-            "type": "boolean"
-          },
-          "result_detail_request": {
-            "type": "object",
-            "properties": {
-              "work_session_id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[A-Za-z0-9_.:-]+$"
-              },
-              "source_incarnation": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 256
-              },
-              "result_ref": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "sequence": {
-                    "type": "string",
-                    "pattern": "^[0-9]+$"
-                  },
-                  "sha256": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{64}$"
-                  }
-                },
-                "required": [
-                  "id",
-                  "sequence",
-                  "sha256"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "work_session_id",
-              "source_incarnation",
-              "result_ref"
-            ],
-            "additionalProperties": false
-          },
-          "reason_code": {
-            "type": "string",
-            "description": "Structured reason code recorded by the host, when available; never inferred from transcript text."
-          }
-        },
-        "required": [
-          "id",
-          "tool",
-          "project_id",
-          "outcome"
-        ],
-        "additionalProperties": false
-      },
-      "maxItems": 5,
-      "description": "Up to five recent non-success/unknown attempts; full review retains all selected attempts."
-    },
     "omitted": {
       "type": "object",
       "properties": {
-        "successful_attempts": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "other_diagnostics": {
+        "attempts": {
           "type": "integer",
           "minimum": 0
         },
@@ -1288,21 +1265,15 @@
         "work_changes": {
           "type": "integer",
           "minimum": 0
-        },
-        "evidence_refs": {
-          "type": "integer",
-          "minimum": 0
         }
       },
       "required": [
-        "successful_attempts",
-        "other_diagnostics",
+        "attempts",
         "unmatched_results",
-        "work_changes",
-        "evidence_refs"
+        "work_changes"
       ],
       "additionalProperties": false,
-      "description": "Presentation omissions from the bounded collected review, separate from collection coverage. Work changes are folded into current_work; evidence includes only shown diagnostics, unmatched results and latest work fields."
+      "description": "Presentation omissions from the bounded collected review, separate from collection coverage. Work changes are folded into current_work; full_review_request lists everything collected."
     },
     "full_review_request": {
       "type": "object",
@@ -1312,7 +1283,7 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9_.:-]+$",
-          "description": "Defaults to the host-stamped current work session. Explicit sessions retain single-session scope unless include_descendants is true."
+          "description": "Defaults to the acting work session. Pass an existing session, including a delivered or abandoned one; work start and work deliver print its ID. An explicit session keeps single-session scope unless include_descendants is true."
         },
         "read_limit": {
           "type": "integer",
@@ -1369,12 +1340,18 @@
             "sha256": {
               "type": "string",
               "pattern": "^[0-9a-f]{64}$"
+            },
+            "incarnation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
             }
           },
           "required": [
             "id",
             "sequence",
-            "sha256"
+            "sha256",
+            "incarnation"
           ],
           "additionalProperties": false
         },
@@ -1423,5 +1400,5 @@
     "coverage"
   ],
   "additionalProperties": false,
-  "description": "Default compact view returns current_work, coverage/counts, up to five recent non-success diagnostics, selected evidence and explicit omission counts plus full_review_request. view=full preserves the prior aggregate fields. Exact result_ref returns detail only; neither view proves command/task correctness. Exact work_ref plus work_field returns only whole retained work-field detail and coverage."
+  "description": "Default compact view returns current_work, coverage, counts, up to five recent attempts that did not succeed and five that did, each with exact references, and explicit omission counts plus full_review_request. view=full returns every bounded attempt, work change and collected reference. Every reference carries id, sequence, sha256 and incarnation and can be copied unchanged into Memory store evidence. Exact result_ref returns detail only; neither view proves command or task correctness. Exact work_ref plus work_field returns only whole retained work-field detail and coverage."
 }

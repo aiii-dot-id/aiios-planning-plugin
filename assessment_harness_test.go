@@ -75,7 +75,7 @@ func TestAssessmentSDKReadOnlyJourney(t *testing.T) {
 	cfg, _ := json.Marshal(assessmentFixtureConfig{q, cap})
 	for _, denied := range []bool{false, true} {
 		t.Run(fmt.Sprint(denied), func(t *testing.T) {
-			k := newFakeKV()
+			k := newFakeBroker()
 			fileReads := 0
 			k.readOnlyCall = func(op string, target, args json.RawMessage) ([]byte, bool) {
 				success := func(v any) ([]byte, bool) {
@@ -144,8 +144,8 @@ func TestAssessmentSDKReadOnlyJourney(t *testing.T) {
 				if got["finding"] != "passed" || got["basis"] != "controlled_harness_capture" {
 					t.Fatal(got)
 				}
-				if fileReads != 1 || k.puts != 0 {
-					t.Fatal("unexpected I/O", fileReads, k.puts)
+				if fileReads != 1 {
+					t.Fatal("unexpected I/O", fileReads)
 				}
 				t.Logf("native SDK fixture assessment including child startup: %s; one report read; zero writes", time.Since(started))
 			}

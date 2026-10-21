@@ -12,7 +12,7 @@ import (
 
 func registerReview(p *sdk.Plugin) {
 	p.Describe("review", sdk.Descriptor{
-		Summary: "Requires an existing core work session, supplied by the host or work_session_id; for new work use core work action=start description=... first. Resume uncertain work or inspect repeated failures: current work, coverage, retained request counts and recent non-success diagnostics with exact evidence. Compact by default; view=full restores the complete bounded review. Pass result_detail_request to read one result, or an entry of work_detail_requests for a whole clipped authored field. Host success does not establish command or task correctness. No new plan or grade.",
+		Summary: "Review one work session from its recorded calls: current work, coverage, counts and the recent attempts that failed and that worked, with exact references. Omit work_session_id for the acting session; pass one for a delivered or abandoned session (work start and work deliver print it). Each reference can be copied unchanged into Memory store evidence. Compact by default; view=full returns every bounded attempt. Pass a result_detail_request, or a work_detail_requests entry, unchanged to read one whole result or work field. Host success does not establish command or task correctness.",
 		Family:  "plan", Primary: true, Keywords: []string{"history", "work", "outcomes", "review"},
 		Effects: sdk.EffectsReadInternal, Capabilities: []string{"interaction.read"},
 		Input: "schemas/review_in.json", Output: "schemas/review_out.json", MaxResultBytes: assessment.MaxReviewBytes,
@@ -93,7 +93,7 @@ func parseReviewContext(raw []byte, context sdk.WorkSession) (assessment.ReviewR
 		case "result_ref", "work_ref":
 			var ref map[string]json.RawMessage
 			var parsed assessment.Ref
-			if json.Unmarshal(v, &ref) != nil || len(ref) != 3 || ref["id"] == nil || ref["sequence"] == nil || ref["sha256"] == nil || json.Unmarshal(v, &parsed) != nil {
+			if json.Unmarshal(v, &ref) != nil || ref["id"] == nil || ref["sequence"] == nil || ref["sha256"] == nil || len(ref) > 4 || len(ref) == 4 && ref["incarnation"] == nil || json.Unmarshal(v, &parsed) != nil {
 				return q, assessment.InvalidReviewArgument(k)
 			}
 			if k == "work_ref" {

@@ -2,127 +2,109 @@
 
 [Source repository](https://github.com/aiii-dot-id/aiios-planning-plugin)
 
-Current work material, recorded request review and bounded planning calibration
-for AII OS 0.1.19 or later. The package declares native Linux x86-64 and macOS
-arm64 variants. It requires `ring4.kv`, `fs.private` and `interaction.read`;
-upgrading a package does not grant permissions.
+Review of recorded work for AII OS 0.1.19 or later. The package declares native
+Linux x86-64 and macOS arm64 variants. It requires only `interaction.read`;
+upgrading a package does not grant permissions. The plugin writes nothing and
+keeps no storage of its own: work owns plans, and the host's records are the
+evidence.
 
-## Current work and evidence
+## Review
 
-`review` is the primary operation for resuming uncertain work or inspecting
-repeated failures. In 0.8.0 its default response is compact: current work,
-collection coverage, retained request counts, and up to five recent non-success
-or unknown outcomes with exact evidence references and result-detail routes.
-Successful calls are summarized by count; host success does not prove command
-success or task correctness. Missing evidence stays unknown.
+`review` reads one work session from the host's interaction records. It makes
+no model call, timer or write, and registers nothing.
 
-**Migration from 0.7.x:** version 0.8.0 declares `id.aeon.planning.core@2`
-because the default review and material response shape changes. Use
-`view:"full"` for the previous aggregate response
-shape (`attempts`, all collected `evidence`, `work_changes` and unmatched results).
-The default compact response uses `diagnostics` and `omitted` instead. `omitted`
-counts presentation omissions separately from collection `coverage`; it does not
-claim those records were unavailable. `full_review_request` is a ready-to-use
-route for the complete bounded lists. It is a fresh read: compare the returned
-source incarnation and cutoff rather than treating it as a frozen replay.
+- `{}` reviews the acting work session and the descendants whose parentage the
+  host can prove.
+- `work_session_id` reviews that session, including one already delivered or
+  abandoned, with single-session scope unless `include_descendants:true` is
+  passed. `work start` and `work deliver` print the session ID.
+- With no acting session and no `work_session_id`, review refuses with
+  `REVIEW_UNAVAILABLE` and says to pass the ID. A failed host session lookup is
+  reported as such: resolve it before retrying, without inventing an ID or
+  starting replacement work.
 
-`review` with `{}` uses the host-stamped current session and descendants whose
-parentage the host can prove. An explicit `work_session_id` keeps single-session
-scope unless `include_descendants:true` is requested. Counts describe retained
-recorded requests, not executor admissions, calibration completions or a complete
-count of task calls. `admissions` remains a compatibility alias for
-`recorded_requests`. Neither compact nor full view verifies task correctness.
+The default compact response carries current work (the root session's latest
+retained fields, with references and clipping routes), collection `coverage`,
+`counts` of retained recorded requests, and `attempts`: up to five recent
+attempts that did not succeed and five that did, newest first. Each attempt
+names its tool, outcome, host `reason_code`, a bounded excerpt, `request_ref`,
+`result_ref` and a `result_detail_request`. `omitted` counts what the
+projection left out, separately from coverage; `full_review_request` is a
+fresh, bounded read of everything collected. `view:"full"` returns every
+selected attempt in recorded order, the work changes, unmatched results and
+`evidence`, a reference for every collected record.
 
-`plan` remains callable and discoverable for bounded calibration. `{}` or
-`mode:"material"` / `mode:"status"` without `plan_id` returns the same compact
-material in its existing `current_work` / `review` wrapper, without repeating
-current work inside the review. `view:"full"` retains its earlier full wrapper.
-These reads register no new task and write no plugin storage. Explicit plan IDs
-and the other legacy modes retain their behavior and do not accept `view`.
+Excerpts keep up to 256 runes of a successful result and up to 512 of any other;
+long non-success text keeps its beginning and tail around an explicit
+`[... middle omitted ...]` marker. No view parses prose into an outcome or
+reconstructs output the host did not retain. Showing a recent failure does not
+assert that it is unresolved, nor that a later success corrected it.
 
-Diagnostics preserve host-recorded `reason_code` and up to 512 runes of retained
-non-success text. Long text retains its beginning and tail with an explicit
-`[... middle omitted ...]` marker. Full-view successful excerpts remain limited
-to 256 runes. No view parses prose into a command outcome or reconstructs output
-the host did not retain. The recent diagnostic selection does not assert that an
-older failure is unresolved, or that a later successful host call corrected it.
+## Evidence for Memory
 
-When a reusable lesson is earned, copy the relevant entries from `evidence` into
-Memory store's `evidence` array unchanged. Each carries the record ID, sequence,
-digest and source incarnation. Compact includes references for its shown
-diagnostics, unmatched results and current work fields; use full view to inspect
-successful corrections or other history. Record only what the actual call and
-result establish, with applicability and uncertainty. Persistence does not prove
-the lesson true.
+Every reference a review returns carries `id`, `sequence`, `sha256` and
+`incarnation`, the fields Memory `store` evidence requires. Copy the references
+of the attempts or work fields that earned a lesson into its `evidence` array
+unchanged, up to 16. The host still checks each one against the current
+record, and persistence does not prove the lesson true: record only what the
+call and its result establish, with applicability and uncertainty.
 
-Pass `result_detail_request` unchanged to `review` to inspect one exact result.
-The detail-only response (`scope: retained_result_detail`) preserves collection
-coverage and returns up to 8,192 runes of retained transcript, without repeating
-aggregate lists. It binds the original work session, source incarnation and
-exact record. `content_truncated`, `execution_truncated` and `omissions` disclose
-limits. A mismatched source/ref refuses; missing evidence is unavailable. The
-whole response remains bounded to 60 KiB.
+## Exact detail
 
-Work text is limited to 256 runes in both aggregate views. For a clipped field,
-pass an entry from `work_detail_requests` unchanged to `review`; current-work
-material retains only the latest field's route. Each request carries `work_ref`,
-`work_field`, source incarnation, original root/descendant scope and read limits.
-The detail-only response (`scope: retained_work_field_detail`, `work_detail`)
-returns the whole retained authored value, including an explicit empty-string
-clear, or an unavailable/too-large refusal. It never substitutes a newer value
-or clips the field. A field that alone exceeds 60 KiB cannot be recovered by
-lowering `record_limit`. This is retained history, not a current-state guarantee
-or verified evidence. `work_ref` and `result_ref` are mutually exclusive;
-transport `ContentRef` hashes are not stable work-record references.
+Pass a `result_detail_request` unchanged to read one result: up to 8,192 runes
+of retained transcript, with `content_truncated`, `execution_truncated` and
+`omissions` disclosing limits. Pass a `work_detail_requests` entry unchanged to
+read one whole retained work field, including an explicit empty-string clear;
+the field is never clipped or replaced by a newer value. Both bind the original
+session, scope, source incarnation and exact record, and return only the detail
+with collection coverage. A changed source refuses with `REVIEW_SOURCE_CHANGED`,
+a mismatched record with `REVIEW_EVIDENCE_CONFLICT`; evidence outside the
+selected work or read limits is unavailable. A reference may be passed with or
+without its `incarnation`, which must equal `source_incarnation`.
 
-The host's exact record ID for this review is excluded from its own report.
-If unavailable, the result says so instead of guessing by tool name. Unresolved
-historical child ancestry makes descendant coverage incomplete; only proven
-children are included. A bounded cutoff excludes later arrivals. Current work
-material folds the root session's retained fields and references, preserves
-cleared values, and reports `not_retained` when no declaration remains. It never
-invents a goal or takes a child's report as the parent's state. These reads make
-no model call.
+## Honesty and limits
 
-If a current-work or review response exceeds its size budget, call `review` with a smaller `record_limit`, such as `{"record_limit":8}`. The bounded result reports incomplete coverage rather than implying that omitted records were checked.
+Host success does not establish command or task correctness; each compact
+response says so. The host's exact record for the review call itself is
+excluded; if the host cannot name it, `own_call_exclusion` says `unavailable`
+rather than guessing by tool name. Old child requests without retained parentage
+make descendant coverage incomplete. A bounded cutoff excludes records arriving
+after the review began. Missing, lost, capped or changed evidence is disclosed,
+and unknown stays unknown. Responses are bounded to 60 KiB; when one exceeds it,
+call `review` with a smaller `record_limit`, such as `{"record_limit":8}`, and
+read the incomplete coverage it reports.
 
-## Bounded calibration
+## Migration from 0.8.x
 
-The existing `plan` modes remain `begin`, `material`, `apply`, `grade`, `advise`,
-`status` and `abandon`. Explicit plan IDs retain their previous behavior.
-`begin` can omit `plan_id` when the host supplies a call reference; the generated
-ID is returned. Meaningful family, falsifier, expected evidence, consequence,
-steps and call budget declarations are still required.
+0.9.0 declares `id.aeon.planning.core@3`.
 
-The host-only `observe` subscription records calibration events. Counts refer
-to host tool completions within a bound session and sequence interval; they do
-not prove external effects or task correctness. Pending grades retain their
-endpoint for retry after delivery catches up. Missing measurements stay
-unresolved, never zero. Closed results are frozen.
-
-`abandon` explicitly closes unfinished work as unresolved while retaining its
-declaration, steps and available measurements. It creates no result, call total
-or grade; retries are idempotent. Graded plans cannot be rewritten. Abandoned
-records are excluded from advice. Older executables cannot decode abandonment
-records, so preserve data and do not downgrade over them.
-
-Open plans are not automatically deleted. When a public mutation needs space,
-an eligible closed record is copied into the plugin's private archive and read
-back before KV removal. Storage or archive failures preserve the authoritative
-record. History pagination and measurement limits are explicit in the returned
-coverage. Schemas in `schemas/` define all inputs and outputs.
+- The calibration loop is retired: the `plan` operation and its `material`,
+  `status`, `begin`, `apply`, `grade`, `advise` and `abandon` modes, the host-only
+  `observe` subscription, the plan registry, its 200-plan cap, archives and
+  advice records. Declare a plan, expected evidence and falsifier on core
+  `work`, and read current work through `review`. The plugin no longer requests
+  `ring4.kv` or `fs.private`; it neither reads nor deletes data that 0.8.x left
+  there.
+- Compact `diagnostics` became `attempts` and includes the most recent
+  successes. Compact `evidence` and `omitted.evidence_refs` are gone, because each
+  shown attempt and field carries its own references; `omitted.attempts`
+  replaces `successful_attempts` and `other_diagnostics`.
+- `counts.admissions`, an alias of `recorded_requests`, is gone.
+- References gain `incarnation`.
 
 ## Tests
 
-Run the regression suite with the SDK version pinned in `go.mod`:
-
 ```sh
-go test -race ./...
+gofmt -l .
+go vet ./...
+go test -race -count=1 ./...
 ```
 
-The suite exercises registered handlers through the SDK frame transport with
-controlled broker fixtures. It covers failure, evidence and storage boundaries;
-it does not replace installed-host or live provider qualification.
+The suite exercises the registered handler through the SDK frame transport with
+controlled broker fixtures. It does not replace installed-host or live provider
+qualification. The `internal/assessment` package also holds deterministic
+experimental checks of revision-bound validation evidence; that controlled
+harness is not a public operation or a production verification service.
 
 ## Build
 
@@ -141,30 +123,3 @@ qualify activation. Verify a released package with
 
 Copyright (c) AI Identity Incorporated. Licensed under Apache-2.0; see LICENSE.
 Required dependency notices are retained in THIRD_PARTY_LICENSES.
-
-## Calling requirements
-
-Current-work `review`, `material` and `status` reads require an existing core
-work session. The host supplies the acting session; a read never creates one.
-For new work, use core `work` with `action:"start"` and `description` first.
-To inspect existing work without opening another session, pass that existing
-`work_session_id` to `review`. A host session lookup failure is an availability
-problem: resolve it before retrying, without inventing an ID or starting
-replacement work.
-
-`plan` with `mode:"begin"` registers optional bounded calibration inside the
-acting session. It does not open core work. It requires `family`,
-`falsifier_class`, `expected_evidence_class`, `consequence_class`,
-`declared_steps` (1–256), and `budget_calls` (1–100000). `plan_id` may be omitted
-only when the host supplies a call reference. Optional `session_id` asserts the
-host's session; it cannot select one. IDs and family are 1–128 ASCII characters;
-class labels are 1–96. Use letters, digits, or `._:-` only, without spaces or
-prose. These are labels chosen for the work, not predefined class names.
-
-For example, after core work exists, a calibration registration can use
-`{"mode":"begin","family":"checks","falsifier_class":"failed","expected_evidence_class":"passed","consequence_class":"local","declared_steps":1,"budget_calls":10}`.
-The input schema's `mode` description lists the required fields for apply,
-grade, advise and abandon. Do not send another mode's fields. Ordinary work
-review does not require begin, apply or grade.
-
-Missing current work now reports `REVIEW_UNAVAILABLE` for default review/material/status, and `CALIBRATION_SESSION_REFUSED` for begin with a host no-session or session-lookup-failed frame. These replace a misleading argument error; malformed user fields still use `OPERATION_ARGUMENT_INVALID`. The reason distinguishes absent work from a failed host lookup. Existing valid requests, session assertions, stored plans and calibration rules are unchanged.

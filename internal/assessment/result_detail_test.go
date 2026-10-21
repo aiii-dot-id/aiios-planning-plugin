@@ -51,6 +51,13 @@ func (f *detailFixture) Read(q sdk.InteractionReadRequest) ([]byte, bool, int64,
 	}
 	return b, end == len(raw), int64(len(raw)), nil
 }
+
+func reviewRef(r sdk.InteractionRecord) Ref {
+	ref := RecordRef(r)
+	ref.Incarnation = "incarnation"
+	return ref
+}
+
 func detailRequest(r sdk.InteractionRecord) ReviewRequest {
 	q := DefaultReviewRequest(r.Details.WorkSession)
 	ref := RecordRef(r)
@@ -73,11 +80,11 @@ func TestReviewExactResultKeepsRecordAndUsesTransportHash(t *testing.T) {
 			t.Fatal(err)
 		}
 		d := got.ResultDetail
-		if d == nil || d.Ref != *q.ResultRef || d.SourceIncarnation != q.SourceIncarnation || d.Content != r.Content || d.ContentTruncated || d.Outcome != "failed" || d.WorkSession != "ws" || len(d.Omissions) != 1 || d.Omissions[0] != "retained_transcript_may_omit_original_output" {
+		if d == nil || d.Ref != reviewRef(r) || d.SourceIncarnation != q.SourceIncarnation || d.Content != r.Content || d.ContentTruncated || d.Outcome != "failed" || d.WorkSession != "ws" || len(d.Omissions) != 1 || d.Omissions[0] != "retained_transcript_may_omit_original_output" {
 			t.Fatalf("%+v", d)
 		}
 		route := got.Attempts[0].ResultDetailRequest
-		if route == nil || route.WorkSession != "ws" || route.SourceIncarnation != q.SourceIncarnation || route.ResultRef != *q.ResultRef {
+		if route == nil || route.WorkSession != "ws" || route.SourceIncarnation != q.SourceIncarnation || route.ResultRef != reviewRef(r) {
 			t.Fatal(route)
 		}
 		if !got.Attempts[0].ResultExcerptTruncated || reader.reads == 0 || f.fileReads != 0 {
@@ -188,7 +195,7 @@ func TestReviewResultDetailLimitsAndRefusedOutcome(t *testing.T) {
 func TestReviewResultSelectionValidationBeforeRead(t *testing.T) {
 	f := newFixture(sample("passed"), 0)
 	base := detailRequest(f.rows[5])
-	for _, name := range []string{"missing incarnation", "missing ref", "empty id", "zero sequence", "bad hash", "oversized incarnation"} {
+	for _, name := range []string{"missing incarnation", "missing ref", "empty id", "zero sequence", "bad hash", "oversized incarnation", "foreign reference incarnation"} {
 		q := base
 		ref := *base.ResultRef
 		q.ResultRef = &ref
@@ -205,6 +212,8 @@ func TestReviewResultSelectionValidationBeforeRead(t *testing.T) {
 			q.ResultRef.SHA256 = "bad"
 		case "oversized incarnation":
 			q.SourceIncarnation = strings.Repeat("x", 257)
+		case "foreign reference incarnation":
+			q.ResultRef.Incarnation = "replacement"
 		}
 		if _, err := Review(f, q); !errors.Is(err, ErrInvalid) || f.queries != 0 {
 			t.Fatal(name, err, f.queries)
@@ -275,5 +284,43 @@ func TestReviewExactDetailAvoidsAggregateBudgetCycle(t *testing.T) {
 	}
 	if len(wire) != 6 || wire["result_detail"] == nil || wire["coverage"] == nil || wire["counts"] != nil || wire["attempts"] != nil || got.Scope != "retained_result_detail" {
 		t.Fatal("detail repeated aggregate payload", string(raw))
+	}
+}
+
+func TestAResultDetailRequestKeepsTheReviewsBounds(t *testing.T) {
+	f := newFixture(sample("failed"), 1)
+	r := f.rows[5]
+	r.Content = "→ shell(" + strings.Repeat("argument", 80) + ")\n← prerequisite missing\n[exit status 1]"
+	f.rows[5] = r
+	for i := 0; i < 200; i++ {
+		f.rows = append(f.rows, sdk.InteractionRecord{ID: fmt.Sprintf("later-%d", i), Sequence: uint64(7 + i), Kind: sdk.InteractionNotice, ProjectID: "project", TurnID: "turn", Details: sdk.InteractionDetails{WorkSession: "ws"}})
+	}
+	reader := &detailFixture{fixture: f, full: r}
+	q := DefaultReviewRequest("ws")
+	q.ReadLimit, q.RecordLimit = 128, 512
+	got, err := Review(reader, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var route *ResultSelection
+	for _, a := range got.Attempts {
+		if a.ResultDetailRequest != nil {
+			route = a.ResultDetailRequest
+		}
+	}
+	if route == nil || route.ReadLimit != 128 || route.RecordLimit != 512 || route.DetailLimit != q.DetailLimit {
+		t.Fatalf("the offered request must carry the review's bounds: %+v", route)
+	}
+	raw, err := json.Marshal(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := DefaultReviewRequest("ws")
+	if err := json.Unmarshal(raw, &copied); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := Review(reader, copied)
+	if err != nil || detail.ResultDetail == nil || detail.ResultDetail.Content != r.Content {
+		t.Fatalf("the copied request must return the result the review found: %v, %+v", err, detail.ResultDetail)
 	}
 }

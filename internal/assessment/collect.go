@@ -25,6 +25,14 @@ func (c *collection) missing(reason string) {
 	addReason(&c.out.Coverage.Reasons, reason)
 }
 
+func (c *collection) ref(r sdk.InteractionRecord) Ref {
+	ref := RecordRef(r)
+	if c.sessionOnly {
+		ref.Incarnation = c.out.SourceIncarnation
+	}
+	return ref
+}
+
 func (c *collection) permit() bool {
 	if c.out.Coverage.ReadCalls >= c.q.Limits.ReadCalls {
 		c.missing("read_budget")
@@ -232,7 +240,7 @@ func (c *collection) collect() error {
 		}
 		a := Attempt{ID: call.ID, Tool: call.Details.Tool, ProjectID: call.ProjectID, Outcome: "unknown"}
 		if c.sessionOnly {
-			ref := RecordRef(call)
+			ref := c.ref(call)
 			a.RequestRef = &ref
 			a.WorkSession = call.Details.WorkSession
 		}
@@ -265,11 +273,11 @@ func (c *collection) collect() error {
 				c.missing("attribution_conflict")
 			} else {
 				if c.sessionOnly {
-					ref := RecordRef(r)
+					ref := c.ref(r)
 					a.ResultRef = &ref
 					a.ResultExcerpt, a.ResultExcerptTruncated = resultExcerpt(r.Content, r.Outcome)
 					if a.ResultExcerptTruncated {
-						a.ResultDetailRequest = &ResultSelection{WorkSession: a.WorkSession, SourceIncarnation: c.out.SourceIncarnation, ResultRef: ref}
+						a.ResultDetailRequest = &ResultSelection{WorkSession: a.WorkSession, SourceIncarnation: c.out.SourceIncarnation, ResultRef: ref, ReadLimit: c.q.Limits.ReadCalls, RecordLimit: c.q.Limits.Records, DetailLimit: c.q.Limits.DetailBytes}
 					}
 					a.ResultRecord = r.Details.ResultRecord
 					a.ResultTruncated = r.Details.Truncated

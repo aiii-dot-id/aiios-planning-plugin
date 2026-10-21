@@ -6,7 +6,7 @@
       "minLength": 1,
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9_.:-]+$",
-      "description": "Defaults to the host-stamped current work session. Explicit sessions retain single-session scope unless include_descendants is true."
+      "description": "Defaults to the acting work session. Pass an existing session, including a delivered or abandoned one; work start and work deliver print its ID. An explicit session keeps single-session scope unless include_descendants is true."
     },
     "read_limit": {
       "type": "integer",
@@ -51,6 +51,11 @@
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "incarnation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
         }
       },
       "required": [
@@ -68,7 +73,7 @@
         "full"
       ],
       "default": "compact",
-      "description": "Compact current work and non-success diagnostics by default. full returns the prior complete bounded review shape. Ignored for exact result or work-field detail."
+      "description": "Compact by default: current work and the recent attempts that failed and that worked. full returns every bounded attempt, work change and collected reference. Ignored for exact result or work-field detail."
     },
     "work_ref": {
       "type": "object",
@@ -85,6 +90,11 @@
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "incarnation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
         }
       },
       "required": [
@@ -113,5 +123,5 @@
     }
   },
   "additionalProperties": false,
-  "description": "Read existing recorded work without creating a task. Omit work_session_id only when the host has an acting core work session. Otherwise supply an existing work_session_id; for new work use core work action=start description=... first."
+  "description": "Read recorded work without creating a task. Omit work_session_id for the acting work session; otherwise pass an existing one, which work start and work deliver print."
 }

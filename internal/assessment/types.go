@@ -30,9 +30,10 @@ type Limits struct {
 func DefaultLimits() Limits { return Limits{32, 512, 256 << 10, 1 << 20} }
 
 type Ref struct {
-	ID       string `json:"id"`
-	Sequence uint64 `json:"sequence,string"`
-	SHA256   string `json:"sha256"`
+	ID          string `json:"id"`
+	Sequence    uint64 `json:"sequence,string"`
+	SHA256      string `json:"sha256"`
+	Incarnation string `json:"incarnation,omitempty"`
 }
 
 type Suite struct {
@@ -125,7 +126,7 @@ func RecordRef(r sdk.InteractionRecord) Ref {
 	r.Annotations = nil
 	r.Deliveries = nil
 	r.ContentRef = nil
-	return Ref{r.ID, r.Sequence, digest(r)}
+	return Ref{ID: r.ID, Sequence: r.Sequence, SHA256: digest(r)}
 }
 
 func validHash(s string) bool {

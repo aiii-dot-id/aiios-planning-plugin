@@ -32,11 +32,11 @@ func TestReviewKeepsTrailingRepairDiagnosticAndStructuredReason(t *testing.T) {
 			if a.Outcome != string(tc.outcome) || a.ReasonCode != tc.code || !strings.HasPrefix(a.ResultExcerpt, "→ "+tc.tool+"(") || !strings.HasSuffix(a.ResultExcerpt, tc.diagnostic) || !strings.Contains(a.ResultExcerpt, "\n[... middle omitted ...]\n") || utf8.RuneCountInString(a.ResultExcerpt) != 512 || !a.ResultExcerptTruncated {
 				t.Fatal(a)
 			}
-			ref := RecordRef(original)
+			ref := reviewRef(original)
 			if a.ResultRef == nil || *a.ResultRef != ref || a.ResultDetailRequest == nil || a.ResultDetailRequest.ResultRef != ref || a.ResultDetailRequest.WorkSession != "ws" || a.ResultDetailRequest.SourceIncarnation != "incarnation" {
 				t.Fatal("excerpt changed the exact detail route", a)
 			}
-			if got.Coverage.ReadCalls != 2 || f.fileReads != 0 || RecordRef(*r) != ref {
+			if got.Coverage.ReadCalls != 2 || f.fileReads != 0 || reviewRef(*r) != ref {
 				t.Fatal("diagnostics changed source or read budget", got.Coverage)
 			}
 			detail, err := Review(f, detailRequest(original))
