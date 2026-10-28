@@ -10,9 +10,11 @@ import (
 	"github.com/aiii-dot-id/aiios-planning-plugin/internal/assessment"
 )
 
+const reviewSummary = "Read back what your earlier calls in one work session did and returned: what failed and what worked, current work, coverage and counts, with exact references. Pass a result_detail_request unchanged to read one earlier result whole. Omit work_session_id for the acting session; pass one for a delivered or abandoned session (work start and work deliver print it). Each reference can be copied unchanged into Memory store evidence. Compact by default; view=full returns every bounded attempt. A work_detail_requests entry, passed unchanged, reads one whole work field. Host success does not establish command or task correctness."
+
 func registerReview(p *sdk.Plugin) {
 	p.Describe("review", sdk.Descriptor{
-		Summary: "Review one work session from its recorded calls: current work, coverage, counts and the recent attempts that failed and that worked, with exact references. Omit work_session_id for the acting session; pass one for a delivered or abandoned session (work start and work deliver print it). Each reference can be copied unchanged into Memory store evidence. Compact by default; view=full returns every bounded attempt. Pass a result_detail_request, or a work_detail_requests entry, unchanged to read one whole result or work field. Host success does not establish command or task correctness.",
+		Summary: reviewSummary,
 		Family:  "plan", Primary: true, Keywords: []string{"history", "work", "outcomes", "review"},
 		Effects: sdk.EffectsReadInternal, Capabilities: []string{"interaction.read"},
 		Input: "schemas/review_in.json", Output: "schemas/review_out.json", MaxResultBytes: assessment.MaxReviewBytes,
@@ -136,6 +138,8 @@ func reviewFailure(err error) error {
 		code = "REVIEW_EVIDENCE_CONFLICT"
 	case errors.Is(err, assessment.ErrProtocol):
 		code = "REVIEW_READER_INVALID"
+	case errors.Is(err, assessment.ErrPageRefused):
+		code = "REVIEW_PAGE_REFUSED"
 	case errors.Is(err, assessment.ErrReviewTooLarge), errors.Is(err, assessment.ErrWorkFieldTooLarge):
 		code = "REVIEW_RESULT_TOO_LARGE"
 	case errors.Is(err, assessment.ErrResultUnavailable), errors.Is(err, assessment.ErrWorkFieldUnavailable):

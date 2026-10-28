@@ -2,11 +2,27 @@ package assessment
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"sort"
 
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
 )
+
+const PageRefusedText = `the host refused a page of recorded history as too large for one read, or as holding a record it cannot serve, even at one record per page (host reason INTERACTION_CONTENT_UNAVAILABLE). This says the page could not be read, not that the records were not retained. Call review with a smaller record_limit, such as {"record_limit":8}, or {"view":"compact"}`
+
+var ErrPageRefused = errors.New(PageRefusedText)
+
+const hostPageRefusal = "INTERACTION_CONTENT_UNAVAILABLE"
+
+func pageRefused(err error) bool {
+	var failed *sdk.OperationError
+	if errors.As(err, &failed) {
+		return failed.ReasonCode == hostPageRefusal
+	}
+	var denied *sdk.Denied
+	return errors.As(err, &denied) && denied.ReasonCode == hostPageRefusal
+}
 
 type collection struct {
 	sessionOnly        bool
@@ -89,6 +105,16 @@ func (c *collection) query(q sdk.InteractionQuery) (*sdk.InteractionPage, error)
 	return p, nil
 }
 
+func (c *collection) page(q *sdk.InteractionQuery) (*sdk.InteractionPage, error) {
+	for {
+		p, err := c.query(*q)
+		if q.Limit == 1 || !pageRefused(err) {
+			return p, err
+		}
+		q.Limit /= 2
+	}
+}
+
 func (c *collection) expand(r sdk.InteractionRecord) (sdk.InteractionRecord, bool, error) {
 	ref := r.ContentRef
 	if ref == nil {
@@ -140,7 +166,11 @@ func (c *collection) scan(f sdk.InteractionFilter) error {
 			return protocol("cursor cycle")
 		}
 		cursors[q.Cursor] = true
-		p, err := c.query(q)
+		p, err := c.page(&q)
+		if pageRefused(err) {
+			c.missing("page_refused")
+			return nil
+		}
 		if err != nil || p == nil {
 			return err
 		}
@@ -203,6 +233,9 @@ func (c *collection) anchor(ref Ref) bool {
 func (c *collection) collect() error {
 
 	p, err := c.query(sdk.InteractionQuery{Version: 1, Source: "recorded", Limit: 1})
+	if pageRefused(err) {
+		return ErrPageRefused
+	}
 	if err != nil || p == nil {
 		return err
 	}
